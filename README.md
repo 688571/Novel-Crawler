@@ -170,12 +170,13 @@ uwsgi --ini uwsgi.ini
 ## 📄 许可证
 
 MIT License
-
+本程序仅供功能测试，需遵循目标站点申明和要求，不得用于非法用途。
 ---
 
 ## 📸 截图
 
-*（这里可以放几张项目截图，例如首页、日志页、小说库、阅读器界面）*
+<img width="709" height="544" alt="a0854ef82c7f78a9ee338cb81c9eb2ae" src="https://github.com/user-attachments/assets/6dfd6699-648b-45dd-8792-430c511e7c98" />
+
 
 ---
 
