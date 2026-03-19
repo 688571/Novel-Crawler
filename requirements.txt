@@ -1,0 +1,6 @@
+flask==2.3.3
+werkzeug==2.3.8
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+readability-lxml>=0.8.1
+chardet>=5.0.0   # 可选，用于编码检测
