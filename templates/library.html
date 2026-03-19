@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+    <title>TT小说库</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 10px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+            margin-top: 0;
+            font-size: 24px;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 30px;
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            text-decoration: none;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        /* 移动端卡片式列表 */
+        .novel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .novel-card {
+            background: #f8f9fa;
+            border-radius: 16px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .novel-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .novel-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: #2c3e50;
+        }
+        .novel-meta {
+            color: #7f8c8d;
+            font-size: 13px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .novel-meta span {
+            background: #ecf0f1;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+        .card-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .read-btn {
+            background: #3498db;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            flex: 1;
+            text-align: center;
+        }
+        .edit-btn {
+            background: #2ecc71;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+        }
+        .edit-btn:hover {
+            background: #27ae60;
+        }
+        /* 新增删除按钮样式 */
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+        }
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+
+        /* 手机端优化 */
+       @media (max-width: 600px) {
+    .container {
+        padding: 15px;
+    }
+    h1 {
+        font-size: 22px;
+    }
+    .novel-grid {
+        grid-template-columns: 1fr;
+    }
+    .btn {
+        display: block;
+        text-align: center;
+        margin-right: 0;
+    }
+    /* 按钮容器改为水平排列，并减小间距 */
+    .card-actions {
+        flex-direction: row;      /* 改为水平排列 */
+        gap: 5px;                 /* 缩小按钮之间的间距 */
+    }
+    /* 三个按钮统一调整内边距和字体，确保一行显示 */
+    .card-actions .read-btn,
+    .card-actions .edit-btn,
+    .card-actions .delete-btn {
+        padding-left: 6px;
+        padding-right: 6px;
+        font-size: 13px;          /* 略微减小字体 */
+        white-space: nowrap;       /* 强制文字不换行 */
+    }
+}
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 TT小说库</h1>
+        <a href="/console" class="btn">⚙️ 爬虫控制台</a>
+        {% if novels %}
+        <div class="novel-grid">
+            {% for novel in novels %}
+            <div class="novel-card" data-filename="{{ novel.filename }}">
+                <h3 class="novel-name">{{ novel.name }}</h3>
+                <div class="novel-meta">
+                    <span>📁 {{ novel.size }}</span>
+                    <span>🕒 {{ novel.mtime[:10] }}</span>
+                </div>
+                <div class="card-actions">
+                    <a href="{{ url_for('read_novel', filename=novel.filename) }}" class="read-btn">📖 阅读</a>
+                    <button class="edit-btn" onclick="renameNovel(this)">✏️ 改名</button>
+                    <!-- 新增删除按钮 -->
+                    <button class="delete-btn" onclick="deleteNovel(this)">🗑️ 删除</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">暂无小说，请先抓取。</div>
+        {% endif %}
+    </div>
+
+    <script>
+        // 重命名小说 (原有功能)
+        function renameNovel(button) {
+            const card = button.closest('.novel-card');
+            const filename = card.dataset.filename;
+            const currentName = card.querySelector('.novel-name').innerText;
+
+            const newName = prompt('请输入新的小说名称', currentName);
+            if (!newName || newName.trim() === '' || newName === currentName) {
+                return;
+            }
+
+            fetch('/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename, new_name: newName.trim() })
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    location.reload();  // 刷新页面显示新名称
+                } else {
+                    alert('修改失败：' + (data.error || '未知错误'));
+                }
+            })
+            .catch(error => {
+                alert('请求出错：' + error.message);
+            });
+        }
+
+        // 新增删除功能
+        function deleteNovel(button) {
+            const card = button.closest('.novel-card');
+            const filename = card.dataset.filename;
+            const novelName = card.querySelector('.novel-name').innerText;
+
+            // 确认删除
+            if (!confirm(`确定要删除小说《${novelName}》吗？此操作不可恢复。`)) {
+                return;
+            }
+
+            // 发送删除请求 (使用 POST 方法，后端需对应 /delete 路由)
+            fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename })
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // 删除成功，刷新列表
+                    location.reload();
+                } else {
+                    alert('删除失败：' + (data.error || '未知错误'));
+                }
+            })
+            .catch(error => {
+                alert('请求出错：' + error.message);
+            });
+        }
+    </script>
+</body>
+</html>

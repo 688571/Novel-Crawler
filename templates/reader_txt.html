@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+    <title>{{ novel_name }} - 阅读器</title>
+    <!-- 使用 opencc-js 库 (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.min.js"></script>
+    <style>
+        /* ========== 全局变量与重置 ========== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.8;
+            transition: background-color 0.3s ease, color 0.2s ease;
+            min-height: 100vh;
+            padding: 10px;
+            position: relative;
+        }
+
+        /* ========== 阅读主容器 ========== */
+        .reader-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #ffffff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-radius: 24px;
+            overflow: hidden;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease;
+        }
+
+        /* 顶部目录面板 */
+        #top-toc-panel {
+            background: #ecf0f1;
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            margin-bottom: 0;
+        }
+        #top-toc-panel h3 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            display: inline-block;
+        }
+        .top-chapter-list {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 5px;
+            scroll-behavior: smooth;
+        }
+        .top-chapter-list ul {
+            list-style: none;
+            display: inline-flex;
+            gap: 6px;
+            padding-left: 0;
+            margin: 0;
+        }
+        .top-chapter-list li {
+            display: inline-block;
+        }
+        .top-chapter-list a {
+            display: inline-block;
+            padding: 5px 12px;
+            background: white;
+            border-radius: 30px;
+            border: 1px solid #bdc3c7;
+            color: #2c3e50;
+            text-decoration: none;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .top-chapter-list a:hover {
+            background: #2c3e50;
+            color: white;
+        }
+        .top-chapter-list a.current {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        .reader-content {
+            padding: 40px 50px;
+            font-size: 16px;
+            transition: font-size 0.2s, line-height 0.2s;
+        }
+
+        @media (max-width: 600px) {
+            .reader-content {
+                padding: 20px 15px;
+                font-size: 15px;
+            }
+        }
+
+        /* 针对小说生成HTML的样式覆盖 */
+        .reader-content h1, .reader-content h2 {
+            font-weight: 500;
+            margin: 1.5em 0 0.8em;
+            color: inherit;
+            border-left: 5px solid currentColor;
+            padding-left: 20px;
+        }
+        .reader-content p {
+            margin: 1em 0;
+            text-indent: 2em;
+            word-break: break-word;
+        }
+
+        /* 导航链接 */
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            margin: 40px 0 20px;
+            padding-top: 20px;
+            border-top: 1px dashed rgba(128,128,128,0.3);
+        }
+        .nav-links a {
+            color: #3498db;
+            text-decoration: none;
+            padding: 8px 20px;
+            border: 1px solid currentColor;
+            border-radius: 40px;
+            transition: all 0.2s;
+            font-size: 14px;
+            min-width: 80px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .nav-links a:hover {
+            background: #3498db;
+            color: white !important;
+        }
+        .nav-links a.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        /* 底部章节目录 */
+        .chapter-directory {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid rgba(128,128,128,0.2);
+        }
+        .chapter-directory h3 {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        .chapter-list {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 10px;
+            scroll-behavior: smooth;
+        }
+        .chapter-list ul {
+            list-style: none;
+            display: inline-flex;
+            gap: 8px;
+            padding-left: 0;
+            margin: 0;
+        }
+        .chapter-list li {
+            display: inline-block;
+        }
+        .chapter-list a {
+            display: inline-block;
+            padding: 8px 15px;
+            background: #ecf0f1;
+            border-radius: 30px;
+            border: 1px solid #bdc3c7;
+            color: #2c3e50;
+            text-decoration: none;
+            font-size: 14px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chapter-list a:hover {
+            background: #2c3e50;
+            color: white;
+        }
+        .chapter-list a.current {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        /* ========== 控制面板 ========== */
+        .control-panel {
+            position: sticky;
+            top: 10px;
+            float: right;
+            width: 260px;
+            margin-left: 20px;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 28px;
+            padding: 18px 16px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            z-index: 100;
+            font-size: 14px;
+        }
+
+        /* 小屏幕（≤1024px）折叠为圆形按钮 */
+        @media (max-width: 1024px) {
+            .control-panel {
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                top: auto;
+                right: auto;
+                width: 50px;
+                height: 50px;
+                border-radius: 50%;
+                padding: 0;
+                overflow: hidden;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                cursor: pointer;
+                background: #3498db url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>') no-repeat center center;
+                background-size: 30px;
+            }
+            .control-panel.expanded {
+                width: 260px;
+                max-width: 280px;
+                height: auto;
+                border-radius: 20px;
+                padding: 12px 12px;
+                background: rgba(255,255,255,0.95);
+                left: 10px;
+                bottom: 20px;
+                cursor: default;
+                background-image: none;
+            }
+            .control-panel.expanded label {
+                margin: 8px 0 3px;
+            }
+            .control-panel.expanded select,
+            .control-panel.expanded input[type="range"],
+            .control-panel.expanded input[type="color"] {
+                margin-bottom: 6px;
+                padding: 4px;
+            }
+            .control-panel.expanded .theme-buttons {
+                margin: 8px 0;
+            }
+            .control-panel.expanded .btn-primary,
+            .control-panel.expanded .btn-secondary {
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+            .control-panel:not(.expanded) h3,
+            .control-panel:not(.expanded) label,
+            .control-panel:not(.expanded) select,
+            .control-panel:not(.expanded) input,
+            .control-panel:not(.expanded) .theme-buttons,
+            .control-panel:not(.expanded) button:not(.panel-toggle) {
+                display: none;
+            }
+            .control-panel .panel-toggle {
+                display: none;
+            }
+            .control-panel.expanded .panel-toggle {
+                display: block;
+                position: absolute;
+                top: 5px;
+                right: 10px;
+                font-size: 20px;
+                cursor: pointer;
+                color: #666;
+            }
+        }
+
+        /* 横屏模式下的展开面板横向布局 */
+    /* 横屏：控制面板始终展开，紧凑两列布局 */
+@media (max-width: 1024px) and (orientation: landscape) {
+    .control-panel {
+        /* 移除圆形折叠样式，恢复为展开状态 */
+        position: fixed !important;          /* 固定位置，避免随页面滚动 */
+        top: 10px !important;
+        right: 10px !important;
+        left: auto !important;
+        bottom: auto !important;
+        width: 280px !important;              /* 固定宽度，与阅读内容留出间距 */
+        height: auto !important;
+        border-radius: 20px !important;
+        padding: 15px !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        overflow: visible !important;
+        cursor: default !important;
+        background-image: none !important;    /* 移除圆形背景图标 */
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;       /* 两列等宽 */
+        gap: 8px 15px;
+        font-size: 13px;
+        z-index: 200;
+    }
+
+    /* 确保所有内部元素可见 */
+    .control-panel h3,
+    .control-panel label,
+    .control-panel select,
+    .control-panel input,
+    .control-panel .theme-buttons,
+    .control-panel .btn-primary,
+    .control-panel .btn-secondary,
+    .control-panel .button-row {
+        display: block !important;            /* 强制显示 */
+    }
+
+    /* 隐藏折叠/展开切换按钮（横屏下无用） */
+    .control-panel .panel-toggle {
+        display: none !important;
+    }
+
+    /* 标题跨两列 */
+    .control-panel h3 {
+        grid-column: 1 / -1;
+        margin: 0 0 8px 0;
+        font-size: 16px;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+        padding-bottom: 5px;
+    }
+
+    /* 左列：字体、字号、行间距、亮度 */
+    .control-panel label:nth-of-type(1) { grid-column: 1; } /* 字体 label */
+    .control-panel select#fontFamily        { grid-column: 1; }
+
+    .control-panel label:nth-of-type(2) { grid-column: 1; } /* 字号 label */
+    .control-panel input#fontSize           { grid-column: 1; }
+
+    .control-panel label:nth-of-type(3) { grid-column: 1; } /* 行间距 label */
+    .control-panel input#lineHeight         { grid-column: 1; }
+
+    .control-panel label:nth-of-type(4) { grid-column: 1; } /* 亮度 label */
+    .control-panel input#brightness         { grid-column: 1; }
+
+    /* 右列：主题、背景色、文字颜色、按钮行 */
+    .control-panel label:nth-of-type(5) { grid-column: 2; } /* 主题 label */
+    .control-panel .theme-buttons           { grid-column: 2; }
+
+    .control-panel label:nth-of-type(6) { grid-column: 2; } /* 背景色 label */
+    .control-panel input#bgColor            { grid-column: 2; }
+
+    .control-panel label:nth-of-type(7) { grid-column: 2; } /* 文字颜色 label */
+    .control-panel input#textColor          { grid-column: 2; }
+
+    /* 按钮行：占据第二列，内部 Flex 同行 */
+    .control-panel .button-row {
+        grid-column: 2;
+        display: flex;
+        gap: 8px;
+        margin-top: 5px;
+    }
+    .control-panel .button-row .btn-primary,
+    .control-panel .button-row .btn-secondary {
+        flex: 1;
+        margin: 0;
+        font-size: 13px;
+        padding: 6px 0;
+    }
+
+    /* 调整各元素边距，使更紧凑 */
+    .control-panel label {
+        margin: 3px 0 2px;
+        font-size: 12px;
+    }
+    .control-panel select,
+    .control-panel input[type="range"],
+    .control-panel input[type="color"] {
+        margin: 0 0 5px;
+        padding: 4px;
+        font-size: 12px;
+        width: 100%;
+    }
+    .control-panel .theme-buttons {
+        margin: 0 0 5px;
+        gap: 4px;
+    }
+    .control-panel .theme-btn {
+        font-size: 12px;
+        padding: 5px 0;
+    }
+    .control-panel .value-display {
+        font-size: 11px;
+        float: right;
+    }
+
+    /* 深色模式适配 */
+    body.dark .control-panel {
+        background: rgba(40, 40, 45, 0.98) !important;
+        border-color: #444;
+        color: #eee;
+    }
+}
+
+        .control-panel h3 {
+            font-size: 18px;
+            font-weight: 500;
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            padding-bottom: 8px;
+        }
+
+        .control-panel label {
+            display: block;
+            margin: 12px 0 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .control-panel select,
+        .control-panel input[type="range"],
+        .control-panel input[type="color"] {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 5px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            background: white;
+        }
+
+        .control-panel input[type="color"] {
+            height: 35px;
+            padding: 2px;
+        }
+
+        .theme-buttons {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .theme-btn {
+            flex: 1 0 auto;
+            padding: 8px 0;
+            border: none;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            background: #f0f0f0;
+            color: #333;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .theme-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .theme-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        .value-display {
+            float: right;
+            color: #666;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 15px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 15px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        /* 深色模式适配 */
+        body.dark .control-panel {
+            background: rgba(40,40,45,0.95);
+            border-color: rgba(80,80,90,0.5);
+            color: #eee;
+        }
+        body.dark .control-panel h3 {
+            color: #ccc;
+            border-bottom-color: #444;
+        }
+        body.dark .control-panel label {
+            color: #aaa;
+        }
+        body.dark .btn-primary {
+            background: #1f6f9f;
+        }
+        body.dark .btn-secondary {
+            background: #495057;
+        }
+        body.dark #top-toc-panel {
+            background: #2d2d2d;
+            border-color: #444;
+        }
+        body.dark #top-toc-panel h3 {
+            color: #ccc;
+        }
+        body.dark .top-chapter-list a {
+            background: #3a3f44;
+            border-color: #4a4f55;
+            color: #ccc;
+        }
+        body.dark .top-chapter-list a:hover {
+            background: #2c3e50;
+            color: white;
+        }
+        body.dark .top-chapter-list a.current {
+            background: #1f6f9f;
+            color: white;
+            border-color: #2980b9;
+        }
+        body.dark .chapter-list a {
+            background: #3a3f44;
+            border-color: #4a4f55;
+            color: #ccc;
+        }
+        body.dark .chapter-list a:hover {
+            background: #2c3e50;
+            color: white;
+        }
+        body.dark .chapter-list a.current {
+            background: #1f6f9f;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        /* ========== 自动浏览悬浮按钮（点击循环速度） ========== */
+        .auto-scroll-btn {
+            position: fixed;
+            right: 300px;
+            top: 150px;
+            transform: translateY(-50%);
+            width: 50px;
+            height: 50px;
+            background: #3498db;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            transition: background 0.2s;
+            border: none;
+            z-index: 300;
+        }
+        .auto-scroll-btn:hover {
+            background: #2980b9;
+        }
+        body.dark .auto-scroll-btn {
+            background: #1f6f9f;
+        }
+        body.dark .auto-scroll-btn:hover {
+            background: #2980b9;
+        }
+
+        /* ========== 独立简繁转换悬浮按钮 ========== */
+        .convert-float {
+            position: fixed;
+            top: 40px;
+            right: 300px;
+            z-index: 350;
+            width: 50px;
+            height: 50px;
+            background: #9b59b6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            transition: background 0.2s;
+            border: none;
+        }
+        .convert-float:hover {
+            background: #8e44ad;
+        }
+        body.dark .convert-float {
+            background: #8e44ad;
+        }
+        body.dark .convert-float:hover {
+            background: #9b59b6;
+        }
+
+        /* 移动端调整位置避免重叠 */
+        @media (max-width: 1024px) {
+            .auto-scroll-btn {
+                right: 10px;
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            .convert-float {
+                top: 10px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+        }
+@media (max-width: 1024px) and (orientation: landscape) {
+    .control-panel,
+    #autoScrollBtn,
+    #convertFloat {
+        display: none !important;
+    }
+}
+        /* 主题样式 */
+        body.light { background-color: #f5f5f5; color: #333; }
+        body.light .reader-container { background: white; }
+        body.dark { background-color: #1e1e1e; color: #d4d4d4; }
+        body.dark .reader-container { background: #2d2d2d; color: #d4d4d4; }
+        body.dark .nav-links a { border-color: #4a6c8f; color: #88b0d0; }
+        body.dark .nav-links a:hover { background: #4a6c8f; color: white; }
+        body.sepia { background-color: #d1cdb7; color: #5b4636; }
+        body.sepia .reader-container { background: #fbf0d9; color: #5b4636; }
+        body.paper { background-color: #e8dcc0; color: #3e2e23; }
+        body.paper .reader-container { background: #fef7e9; color: #3e2e23; }
+    </style>
+</head>
+<body class="light">
+    <!-- 独立简繁转换悬浮按钮 -->
+    <div class="convert-float" id="convertFloat" onclick="toggleConvert()">简</div>
+
+    <!-- 自动浏览悬浮按钮（点击循环速度） -->
+    <div class="auto-scroll-btn" id="autoScrollBtn" onclick="cycleAutoSpeed()">停</div>
+
+    <div class="control-panel" id="controlPanel">
+        <div class="panel-toggle" onclick="togglePanel(event)">✕</div>
+        <h3>📖 阅读设置</h3>
+        <label>字体 <span class="value-display" id="fontFamilyValue">微软雅黑</span></label>
+        <select id="fontFamily">
+            <option value="'Microsoft YaHei', sans-serif" selected>微软雅黑</option>
+            <option value="'SimSun', '宋体', serif">宋体</option>
+            <option value="'SimHei', '黑体', sans-serif">黑体</option>
+            <option value="'KaiTi', '楷体', serif">楷体</option>
+            <option value="'FangSong', '仿宋', serif">仿宋</option>
+        </select>
+
+        <label>字号 <span class="value-display" id="fontSizeValue">16px</span></label>
+        <input type="range" id="fontSize" min="12" max="28" value="16" step="1">
+
+        <label>行间距 <span class="value-display" id="lineHeightValue">1.8</span></label>
+        <input type="range" id="lineHeight" min="1.2" max="2.8" value="1.8" step="0.1">
+
+        <label>亮度 <span class="value-display" id="brightnessValue">100%</span></label>
+        <input type="range" id="brightness" min="50" max="150" value="100" step="1">
+
+        <label>主题</label>
+        <div class="theme-buttons">
+            <button class="theme-btn active" onclick="setTheme('light', event)">亮色</button>
+            <button class="theme-btn" onclick="setTheme('dark', event)">深色</button>
+            <button class="theme-btn" onclick="setTheme('sepia', event)">护眼</button>
+            <button class="theme-btn" onclick="setTheme('paper', event)">纸色</button>
+        </div>
+
+        <label>背景色</label>
+        <input type="color" id="bgColor" value="#ffffff" onchange="setCustomBg(this.value)">
+
+        <label>文字颜色</label>
+        <input type="color" id="textColor" value="#333333" onchange="setCustomColor(this.value)">
+
+<div class="button-row" style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+    <button class="btn-primary" onclick="saveSettings()">💾 保存</button>
+    <button class="btn-secondary" onclick="window.location.href='{{ url_for('library') }}'">📚 书库</button>
+</div>
+    </div>
+
+    <div class="reader-container">
+        <!-- 顶部目录面板 -->
+        <div id="top-toc-panel">
+            <h3>📑 快速跳转</h3>
+            <div class="top-chapter-list" id="top-chapter-list">
+                <!-- 将由 JavaScript 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 动态章节内容区域 -->
+        <div class="reader-content" id="content-frame"></div>
+    </div>
+
+    <script>
+        // 将后端传递的 chapters 数据转换为 JSON 并嵌入
+        var chaptersData = {{ chapters|tojson }};
+        var novelName = {{ novel_name|tojson }};
+        var currentChapterIndex = 0;
+
+        var contentFrame = document.getElementById('content-frame');
+        var topChapterList = document.getElementById('top-chapter-list');
+        var convertFloat = document.getElementById('convertFloat');
+        var autoScrollBtn = document.getElementById('autoScrollBtn');
+
+        // 书签的 localStorage 键名
+        var BOOKMARK_KEY = 'bookmark_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
+        // 简繁转换模式键名
+        var CONVERT_MODE_KEY = 'convertMode_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
+
+        // 自动浏览相关变量
+        // 自动浏览相关变量（优化平滑滚动）
+        var speedLevels = [0, 2, 3, 5, 7, 9];      // 速度档位（单位：每100ms像素数，保持与原逻辑一致）
+        var currentSpeedIndex = 0;                  // 当前档位索引（0对应停止）
+        var autoSpeed = speedLevels[currentSpeedIndex]; // 当前速度值（0-9）
+        var rafId = null;                           // requestAnimationFrame ID
+        var lastTimestamp = null;                    // 上一帧时间戳
+        var remainder = 0;                           // 亚像素滚动累积
+        var pixelsPerSecond = 0;                      // 换算后的每秒滚动像素（autoSpeed * 10）
+
+        // 记录当前已应用的转换模式
+        var appliedConvertMode = null;
+
+        // 保存书签
+        function saveBookmark(index) {
+            try { localStorage.setItem(BOOKMARK_KEY, index); } catch (e) {}
+        }
+
+        function loadBookmark() {
+            try {
+                var saved = localStorage.getItem(BOOKMARK_KEY);
+                return saved !== null ? parseInt(saved, 10) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // 自动滚动当前章节目录项到可视区域（顶部和底部）
+        function scrollCurrentChapterIntoView() {
+            // 顶部目录
+            var topCurrentLink = document.querySelector('#top-chapter-list a.current');
+            if (topCurrentLink) {
+                var topContainer = document.querySelector('#top-chapter-list');
+                var topContainerRect = topContainer.getBoundingClientRect();
+                var topLinkRect = topCurrentLink.getBoundingClientRect();
+                if (topLinkRect.left < topContainerRect.left || topLinkRect.right > topContainerRect.right) {
+                    topContainer.scrollLeft += topLinkRect.left - topContainerRect.left - (topContainerRect.width / 2) + (topLinkRect.width / 2);
+                }
+            }
+
+            // 底部目录
+            var bottomCurrentLink = document.querySelector('.chapter-list a.current');
+            if (bottomCurrentLink) {
+                var bottomContainer = document.querySelector('.chapter-list');
+                var bottomContainerRect = bottomContainer.getBoundingClientRect();
+                var bottomLinkRect = bottomCurrentLink.getBoundingClientRect();
+                if (bottomLinkRect.left < bottomContainerRect.left || bottomLinkRect.right > bottomContainerRect.right) {
+                    bottomContainer.scrollLeft += bottomLinkRect.left - bottomContainerRect.left - (bottomContainerRect.width / 2) + (bottomLinkRect.width / 2);
+                }
+            }
+        }
+
+        // 渲染顶部目录
+        function renderTopToc(currentIndex) {
+            var html = '<ul>';
+            for (var i = 0; i < chaptersData.length; i++) {
+                var chap = chaptersData[i];
+                var currentClass = (i === currentIndex) ? 'current' : '';
+                var displayTitle = (i+1) + '. ' + chap.title;
+                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
+            }
+            html += '</ul>';
+            topChapterList.innerHTML = html;
+        }
+
+        // 应用保存的转换模式
+        function applySavedConvertMode() {
+            try {
+                var savedMode = localStorage.getItem(CONVERT_MODE_KEY);
+                if (savedMode && (savedMode === 's2t' || savedMode === 't2s')) {
+                    if (appliedConvertMode !== savedMode) {
+                        convertText(savedMode, false);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // 渲染当前章节
+        function renderChapter(index) {
+            var chapter = chaptersData[index];
+            if (!chapter) return;
+
+            var title = chapter.title;
+            var contentHtml = chapter.content;
+
+            var html = '<section id="chap' + (index+1) + '">';
+            html += '<h2>' + title + '</h2>';
+            html += contentHtml;
+            html += '<div class="nav-links">';
+            html += '<a ' + (index > 0 ? 'onclick="goToChapter(' + (index-1) + ')"' : 'class="disabled"') + '>上一章</a>';
+            html += '<a onclick="goToToc()">目录</a>';
+            html += '<a ' + (index < chaptersData.length-1 ? 'onclick="goToChapter(' + (index+1) + ')"' : 'class="disabled"') + '>下一章</a>';
+            html += '</div>';
+
+            // 底部章节目录（添加序号）
+            html += '<div class="chapter-directory">';
+            html += '<h3>📑 目录 (共 ' + chaptersData.length + ' 章)</h3>';
+            html += '<div class="chapter-list"><ul>';
+            for (var i = 0; i < chaptersData.length; i++) {
+                var chap = chaptersData[i];
+                var currentClass = (i === index) ? 'current' : '';
+                var displayTitle = (i+1) + '. ' + chap.title;
+                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
+            }
+            html += '</ul></div></div></section>';
+
+            contentFrame.innerHTML = html;
+            currentChapterIndex = index;
+
+            // 渲染顶部目录
+            renderTopToc(index);
+
+            document.title = title + ' - ' + novelName;
+            window.location.hash = 'chap' + (index+1);
+            saveBookmark(index);
+
+            // 应用保存的简繁模式
+            applySavedConvertMode();
+
+            setTimeout(scrollCurrentChapterIntoView, 50);
+        }
+
+        window.goToChapter = function(index) {
+            if (index >= 0 && index < chaptersData.length) {
+                stopAutoScroll();
+                renderChapter(index);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        };
+
+        function goToToc() {
+            var directory = document.querySelector('.chapter-directory');
+            if (directory) directory.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 初始化章节
+        function initFromHashOrBookmark() {
+            var hash = window.location.hash;
+            var targetIndex = null;
+            if (hash && hash.startsWith('#chap')) {
+                var num = parseInt(hash.substring(5), 10);
+                if (!isNaN(num) && num >= 1 && num <= chaptersData.length) targetIndex = num - 1;
+            }
+            if (targetIndex === null) targetIndex = loadBookmark();
+            if (targetIndex === null || targetIndex < 0 || targetIndex >= chaptersData.length) targetIndex = 0;
+            renderChapter(targetIndex);
+        }
+
+        // ---------- 自动浏览功能：点击循环速度 ----------
+        // 开始自动平滑滚动
+function startAutoScroll() {
+    if (autoSpeed === 0) return;          // 速度为0不启动
+    if (rafId) return;                     // 已经滚动中
+
+    pixelsPerSecond = autoSpeed * 10;       // 保持与原速度一致（原每100ms滚动autoSpeed像素）
+    lastTimestamp = null;
+    remainder = 0;
+
+    function step(timestamp) {
+        if (autoSpeed === 0) {              // 运行中速度被置为0则停止
+            stopAutoScroll();
+            return;
+        }
+
+        // 初始化上一帧时间戳
+        if (lastTimestamp === null) {
+            lastTimestamp = timestamp;
+            rafId = requestAnimationFrame(step);
+            return;
+        }
+
+        // 计算时间差（限制最大步长100ms，防止切后台后突跳）
+        var delta = Math.min(100, timestamp - lastTimestamp);
+        if (delta > 5) {  // 仅当时间差大于5ms时才移动，避免过于频繁的无意义计算
+            // 根据时间差计算本次应滚动的像素（含亚像素累积）
+            var move = (delta / 1000) * pixelsPerSecond + remainder;
+            var intMove = Math.floor(move);      // 整数部分立即滚动
+            remainder = move - intMove;           // 小数部分存留到下一帧
+
+            if (intMove !== 0) {
+                // 检测是否即将滚动到底部，若是则直接滚动到底并停止
+                var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+                var newScrollY = window.scrollY + intMove;
+
+                if (newScrollY >= maxScroll) {
+                    window.scrollTo(0, maxScroll);
+                    stopAutoScroll();  // 到底后自动停止
+                    return;
+                } else {
+                    window.scrollBy(0, intMove);
+                }
+            }
+        }
+
+        lastTimestamp = timestamp;
+        rafId = requestAnimationFrame(step);
+    }
+
+    rafId = requestAnimationFrame(step);
+}
+
+// 停止自动滚动
+function stopAutoScroll() {
+    if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+    }
+    lastTimestamp = null;
+    remainder = 0;
+}
+
+// 点击悬浮按钮：循环切换速度档位，并重启滚动
+window.cycleAutoSpeed = function() {
+    currentSpeedIndex = (currentSpeedIndex + 1) % speedLevels.length;
+    autoSpeed = speedLevels[currentSpeedIndex];
+
+    // 更新按钮文字
+    if (autoSpeed === 0) {
+        autoScrollBtn.textContent = '停';
+    } else {
+        autoScrollBtn.textContent = autoSpeed + 'X';
+    }
+
+    // 停止当前滚动（如有），再按新速度启动
+    stopAutoScroll();
+    if (autoSpeed > 0) {
+        startAutoScroll();
+    }
+};
+
+        // ---------- 简繁转换功能 (独立按钮) ----------
+        function convertText(mode, save = true) {
+            if (typeof OpenCC === 'undefined') {
+                alert('简繁转换库加载失败，请刷新页面重试。如果问题持续，请检查网络。');
+                return;
+            }
+
+            if (appliedConvertMode === mode) return;
+
+            const converter = OpenCC.Converter({
+                from: mode === 's2t' ? 'cn' : 'tw',
+                to: mode === 's2t' ? 'tw' : 'cn'
+            });
+
+            const section = document.querySelector('#content-frame section');
+            if (!section) return;
+
+            const walker = document.createTreeWalker(
+                section,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+            const textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+            textNodes.forEach(node => {
+                node.nodeValue = converter(node.nodeValue);
+            });
+
+            appliedConvertMode = mode;
+            convertFloat.textContent = mode === 's2t' ? '繁' : '简';
+
+            if (save) {
+                try {
+                    localStorage.setItem(CONVERT_MODE_KEY, mode);
+                } catch (e) {}
+            }
+        }
+
+        window.toggleConvert = function() {
+            var currentText = convertFloat.textContent;
+            var targetMode = currentText === '简' ? 's2t' : 't2s';
+            convertText(targetMode, true);
+        };
+
+        function initConvertButton() {
+            try {
+                var savedMode = localStorage.getItem(CONVERT_MODE_KEY);
+                if (savedMode === 's2t') {
+                    convertFloat.textContent = '繁';
+                } else if (savedMode === 't2s') {
+                    convertFloat.textContent = '简';
+                } else {
+                    convertFloat.textContent = '简';
+                }
+            } catch (e) {
+                convertFloat.textContent = '简';
+            }
+        }
+
+        // ---------- 原有设置功能保持不变 ----------
+        (function() {
+            const controlPanel = document.getElementById('controlPanel');
+            const readerContainer = document.querySelector('.reader-container');
+
+            const fontSizeSlider = document.getElementById('fontSize');
+            const fontSizeSpan = document.getElementById('fontSizeValue');
+            const lineHeightSlider = document.getElementById('lineHeight');
+            const lineHeightSpan = document.getElementById('lineHeightValue');
+            const fontFamilySelect = document.getElementById('fontFamily');
+            const fontFamilySpan = document.getElementById('fontFamilyValue');
+            const brightnessSlider = document.getElementById('brightness');
+            const brightnessSpan = document.getElementById('brightnessValue');
+            const bgColorPicker = document.getElementById('bgColor');
+            const textColorPicker = document.getElementById('textColor');
+            const themeButtons = document.querySelectorAll('.theme-btn');
+
+            let isLoading = false;
+
+            window.saveSettings = function() {
+                const settings = {
+                    fontSize: fontSizeSlider.value,
+                    lineHeight: lineHeightSlider.value,
+                    fontFamily: fontFamilySelect.value,
+                    fontFamilyText: fontFamilySelect.options[fontFamilySelect.selectedIndex].text,
+                    brightness: brightnessSlider.value,
+                    theme: document.body.className,
+                    bgColor: bgColorPicker.value,
+                    textColor: textColorPicker.value
+                };
+                localStorage.setItem('novelReaderSettings', JSON.stringify(settings));
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ 已保存';
+                setTimeout(() => { btn.textContent = originalText; }, 1000);
+            };
+
+            function loadSettings() {
+                const saved = localStorage.getItem('novelReaderSettings');
+                if (!saved) return;
+                try {
+                    const settings = JSON.parse(saved);
+                    isLoading = true;
+
+                    if (settings.theme) {
+                        document.body.className = settings.theme;
+                        themeButtons.forEach(btn => {
+                            btn.classList.remove('active');
+                            if ((settings.theme === 'light' && btn.textContent.includes('亮色')) ||
+                                (settings.theme === 'dark' && btn.textContent.includes('深色')) ||
+                                (settings.theme === 'sepia' && btn.textContent.includes('护眼')) ||
+                                (settings.theme === 'paper' && btn.textContent.includes('纸色'))) {
+                                btn.classList.add('active');
+                            }
+                        });
+                    }
+
+                    if (settings.fontSize) {
+                        fontSizeSlider.value = settings.fontSize;
+                        fontSizeSpan.textContent = settings.fontSize + 'px';
+                        contentFrame.style.fontSize = settings.fontSize + 'px';
+                    }
+                    if (settings.lineHeight) {
+                        lineHeightSlider.value = settings.lineHeight;
+                        lineHeightSpan.textContent = settings.lineHeight;
+                        contentFrame.style.lineHeight = settings.lineHeight;
+                    }
+                    if (settings.fontFamily) {
+                        fontFamilySelect.value = settings.fontFamily;
+                        fontFamilySpan.textContent = settings.fontFamilyText || '微软雅黑';
+                        contentFrame.style.fontFamily = settings.fontFamily;
+                    }
+                    if (settings.brightness) {
+                        brightnessSlider.value = settings.brightness;
+                        brightnessSpan.textContent = settings.brightness + '%';
+                        readerContainer.style.filter = `brightness(${settings.brightness}%)`;
+                    }
+                    if (settings.bgColor) {
+                        bgColorPicker.value = settings.bgColor;
+                        document.body.style.backgroundColor = settings.bgColor;
+                        readerContainer.style.backgroundColor = settings.bgColor;
+                    }
+                    if (settings.textColor) {
+                        textColorPicker.value = settings.textColor;
+                        document.body.style.color = settings.textColor;
+                        contentFrame.style.color = settings.textColor;
+                    }
+
+                    isLoading = false;
+                } catch (e) { isLoading = false; }
+            }
+
+            window.setTheme = function(theme, event) {
+                if (isLoading) return;
+                document.body.className = theme;
+                themeButtons.forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+
+                if (theme === 'light') {
+                    bgColorPicker.value = '#ffffff';
+                    textColorPicker.value = '#333333';
+                } else if (theme === 'dark') {
+                    bgColorPicker.value = '#1e1e1e';
+                    textColorPicker.value = '#d4d4d4';
+                } else if (theme === 'sepia') {
+                    bgColorPicker.value = '#fbf0d9';
+                    textColorPicker.value = '#5b4636';
+                } else if (theme === 'paper') {
+                    bgColorPicker.value = '#fef7e9';
+                    textColorPicker.value = '#3e2e23';
+                }
+                setCustomBg(bgColorPicker.value);
+                setCustomColor(textColorPicker.value);
+            };
+
+            window.setCustomBg = function(color) {
+                if (isLoading) return;
+                document.body.style.backgroundColor = color;
+                readerContainer.style.backgroundColor = color;
+            };
+            window.setCustomColor = function(color) {
+                if (isLoading) return;
+                document.body.style.color = color;
+                contentFrame.style.color = color;
+            };
+
+            fontSizeSlider.addEventListener('input', function() {
+                if (isLoading) return;
+                const val = this.value + 'px';
+                contentFrame.style.fontSize = val;
+                fontSizeSpan.textContent = val;
+            });
+            lineHeightSlider.addEventListener('input', function() {
+                if (isLoading) return;
+                const val = this.value;
+                contentFrame.style.lineHeight = val;
+                lineHeightSpan.textContent = val;
+            });
+            fontFamilySelect.addEventListener('change', function() {
+                if (isLoading) return;
+                const font = this.value;
+                contentFrame.style.fontFamily = font;
+                fontFamilySpan.textContent = this.options[this.selectedIndex].text;
+            });
+            brightnessSlider.addEventListener('input', function() {
+                if (isLoading) return;
+                const val = this.value + '%';
+                readerContainer.style.filter = 'brightness(' + val + ')';
+                brightnessSpan.textContent = val;
+            });
+
+            window.togglePanel = function(e) {
+                e.stopPropagation();
+                controlPanel.classList.toggle('expanded');
+            };
+            controlPanel.addEventListener('click', function(e) {
+                if (window.innerWidth <= 1024 && !controlPanel.classList.contains('expanded')) {
+                    controlPanel.classList.add('expanded');
+                }
+            });
+            document.querySelector('.panel-toggle').addEventListener('click', function(e) {
+                if (window.innerWidth <= 1024) {
+                    controlPanel.classList.remove('expanded');
+                    e.stopPropagation();
+                }
+            });
+
+            loadSettings();
+            if (!localStorage.getItem('novelReaderSettings')) {
+                readerContainer.style.filter = 'brightness(100%)';
+            }
+        })();
+
+        // 初始化转换按钮状态
+        initConvertButton();
+
+        // 初始化
+        initFromHashOrBookmark();
+    </script>
+</body>
+</html>

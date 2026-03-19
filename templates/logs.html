@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>任务日志 - {{ task_id }}</title>
+    <style>
+        body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 20px; }
+        #log-container { background: #252526; padding: 15px; border-radius: 5px; height: 70vh; overflow-y: auto; }
+        .log-line { margin: 2px 0; white-space: pre-wrap; }
+        .status { margin-top: 10px; font-weight: bold; }
+        .finished { color: #6a9955; }
+        .running { color: #e5b567; }
+        .error { color: #f44747; }
+        button { margin-top: 10px; padding: 8px 15px; background: #0e7c7e; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0b5e5f; }
+    </style>
+</head>
+<body>
+    <h2>任务 {{ task_id }}</h2>
+    <div class="status" id="status">状态: <span id="status-text">{{ task.status }}</span></div>
+    <div id="log-container"></div>
+    <button onclick="window.location.href='/reader/' + encodeURIComponent('{{ task.safe_name }}')" id="reader-btn" style="display:none;">进入阅读器</button>
+    <button onclick="window.location.href='/'">返回主页</button>
+
+    <script>
+        const taskId = "{{ task_id }}";
+        const logContainer = document.getElementById('log-container');
+        const statusSpan = document.getElementById('status-text');
+        const readerBtn = document.getElementById('reader-btn');
+        let lastLogCount = 0;
+
+        function fetchLogs() {
+            fetch(`/api/logs/${taskId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        logContainer.innerHTML = '任务不存在';
+                        return;
+                    }
+                    statusSpan.innerText = data.status;
+                    if (data.status === 'finished' && data.safe_name) {
+    readerBtn.style.display = 'inline-block';
+    readerBtn.onclick = () => {
+        window.location.href = '/reader/' + encodeURIComponent(data.safe_name);
+    };
+}
+
+                    // 只追加新日志
+                    if (data.log.length > lastLogCount) {
+                        for (let i = lastLogCount; i < data.log.length; i++) {
+                            const line = document.createElement('div');
+                            line.className = 'log-line';
+                            line.textContent = data.log[i];
+                            logContainer.appendChild(line);
+                        }
+                        lastLogCount = data.log.length;
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+
+                    if (data.status === 'running') {
+                        setTimeout(fetchLogs, 2000);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    setTimeout(fetchLogs, 5000);
+                });
+        }
+
+        fetchLogs();
+    </script>
+</body>
+</html>
