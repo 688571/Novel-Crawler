@@ -231,6 +231,7 @@
                 overflow: hidden;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 cursor: pointer;
+                background-color: #3498db;
                 background: #3498db url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>') no-repeat center center;
                 background-size: 30px;
             }
@@ -285,7 +286,7 @@
             }
         }
 
-        /* 横屏模式下的展开面板横向布局 */
+
     /* 横屏：控制面板始终展开，紧凑两列布局 */
 @media (max-width: 1024px) and (orientation: landscape) {
     .control-panel {
@@ -404,6 +405,7 @@
 
     /* 深色模式适配 */
     body.dark .control-panel {
+        background-color: #3498db;  /* 保持蓝色背景 */
         background: rgba(40, 40, 45, 0.98) !important;
         border-color: #444;
         color: #eee;
@@ -509,6 +511,7 @@
 
         /* 深色模式适配 */
         body.dark .control-panel {
+            background-color: #3498db;  /* 保持蓝色背景 */
             background: rgba(40,40,45,0.95);
             border-color: rgba(80,80,90,0.5);
             color: #eee;
@@ -561,12 +564,42 @@
             color: white;
             border-color: #2980b9;
         }
-
+/* 向下翻页按钮（新增） */
+.page-down-btn {
+    position: fixed;
+    right: 300px;
+    bottom: 100px; 
+    transform: translateY(-50%);
+    width: 50px;
+    height: 50px;
+    background: #2ecc71;      /* 绿色背景 */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    transition: background 0.2s;
+    border: none;
+    z-index: 300;
+}
+.page-down-btn:hover {
+    background: #27ae60;
+}
+body.dark .page-down-btn {
+    background: #27ae60;
+}
+body.dark .page-down-btn:hover {
+    background: #2ecc71;
+}
         /* ========== 自动浏览悬浮按钮（点击循环速度） ========== */
         .auto-scroll-btn {
             position: fixed;
             right: 300px;
-            top: 150px;
+            top: 140px;
             transform: translateY(-50%);
             width: 50px;
             height: 50px;
@@ -625,26 +658,9 @@
             background: #9b59b6;
         }
 
-        /* 移动端调整位置避免重叠 */
-        @media (max-width: 1024px) {
-            .auto-scroll-btn {
-                right: 10px;
-                width: 40px;
-                height: 40px;
-                font-size: 16px;
-            }
-            .convert-float {
-                top: 10px;
-                right: 10px;
-                width: 40px;
-                height: 40px;
-                font-size: 18px;
-            }
-        }
+/* 横屏模式下隐藏所有浮动按钮（与原有规则保持一致） */
 @media (max-width: 1024px) and (orientation: landscape) {
-    .control-panel,
-    #autoScrollBtn,
-    #convertFloat {
+    .control-panel {            /* 新增隐藏 */
         display: none !important;
     }
 }
@@ -659,15 +675,65 @@
         body.sepia .reader-container { background: #fbf0d9; color: #5b4636; }
         body.paper { background-color: #e8dcc0; color: #3e2e23; }
         body.paper .reader-container { background: #fef7e9; color: #3e2e23; }
+
+        /* ---------- 新增：小屏幕（≤1024px）下将三个操作按钮移至右侧并优化排列 ---------- */
+        /* 竖屏：右侧边缘垂直排列 */
+        @media (max-width: 1024px) and (orientation: portrait) {
+            .convert-float,
+            .auto-scroll-btn,
+            .page-down-btn {
+                right: 10px;
+                left: auto;
+                width: 48px;
+                height: 48px;
+                font-size: 22px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transform: none; /* 取消原有的translateY */
+            }
+            .convert-float {
+                top: 70px;
+            }
+            .auto-scroll-btn {
+                top: 130px;
+            }
+            .page-down-btn {
+                bottom: 30px;
+            }
+        }
+
+        /* 横屏：右下角垂直排列，避免覆盖控制面板（控制面板固定在右上） */
+        @media (max-width: 1024px) and (orientation: landscape) {
+            .convert-float,
+            .auto-scroll-btn,
+            .page-down-btn {
+                right: 20px;
+                left: auto;
+                top: auto;
+                width: 44px;
+                height: 44px;
+                font-size: 20px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transform: none;
+            }
+            .convert-float {
+                top: 40px;
+            }
+            .auto-scroll-btn {
+                top: 100px;
+            }
+            .page-down-btn {
+                bottom: 30px;
+            }
+        }
     </style>
 </head>
 <body class="light">
     <!-- 独立简繁转换悬浮按钮 -->
     <div class="convert-float" id="convertFloat" onclick="toggleConvert()">简</div>
-
     <!-- 自动浏览悬浮按钮（点击循环速度） -->
-    <div class="auto-scroll-btn" id="autoScrollBtn" onclick="cycleAutoSpeed()">停</div>
-
+    <div class="auto-scroll-btn" id="autoScrollBtn" onclick="cycleAutoSpeed()">▷</div>
+    <!-- 向下翻页按钮（新增） -->
+    <div class="page-down-btn" id="pageDownBtn" onclick="pageDown()">↓</div>
     <div class="control-panel" id="controlPanel">
         <div class="panel-toggle" onclick="togglePanel(event)">✕</div>
         <h3>📖 阅读设置</h3>
@@ -956,7 +1022,7 @@ window.cycleAutoSpeed = function() {
 
     // 更新按钮文字
     if (autoSpeed === 0) {
-        autoScrollBtn.textContent = '停';
+        autoScrollBtn.textContent = '▷';
     } else {
         autoScrollBtn.textContent = autoSpeed + 'X';
     }
@@ -1201,7 +1267,13 @@ window.cycleAutoSpeed = function() {
                 readerContainer.style.filter = 'brightness(100%)';
             }
         })();
-
+// 向下翻页功能（新增）
+window.pageDown = function() {
+    window.scrollBy({
+        top: window.innerHeight,
+        behavior: 'smooth'
+    });
+};
         // 初始化转换按钮状态
         initConvertButton();
 
