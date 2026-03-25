@@ -10,6 +10,7 @@ import os
 import re
 from urllib.parse import urljoin
 import requests.exceptions
+import hashlib
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -58,6 +59,9 @@ DIRECTORY_TITLE_SELECTOR = 'h1'  # 小说名所在标签
 DIRECTORY_AUTHOR_SELECTOR = '.book-describe p a'  # 作者链接，取文本
 DIRECTORY_CHAPTER_LIST_SELECTOR = '.book-list ul li a'  # 章节链接列表
 
+def get_url_hash(url):
+    """返回URL的MD5哈希值，作为章节唯一标识"""
+    return hashlib.md5(url.encode('utf-8')).hexdigest()
 
 def fetch_html(session, url, max_retries=5, base_delay=2, log_callback=None):
     """获取HTML，带重试机制"""
@@ -95,7 +99,6 @@ def fetch_html(session, url, max_retries=5, base_delay=2, log_callback=None):
     if log_callback: log_callback(msg)
     return None
 
-
 def extract_novel_name_from_title(html):
     """从<title>标签提取小说名"""
     soup = BeautifulSoup(html, 'html.parser')
@@ -111,11 +114,9 @@ def extract_novel_name_from_title(html):
     novel_name = re.sub(r'^第\d+章\s*', '', novel_name)
     return novel_name
 
-
 def sanitize_filename(name):
     """清理文件名中的非法字符"""
     return re.sub(r'[\\/*?:"<>|\s]', '_', name)
-
 
 def parse_title(soup, selectors=None):
     """通用标题解析"""
@@ -128,7 +129,6 @@ def parse_title(soup, selectors=None):
             if text:
                 return text
     return "未知标题"
-
 
 def parse_content(soup, selectors=None):
     """通用正文解析"""
@@ -157,7 +157,6 @@ def parse_content(soup, selectors=None):
     # 压缩连续空行
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
-
 
 def _find_link_by_patterns(soup, current_url, patterns):
     """根据模式查找链接（内部函数）"""
@@ -196,16 +195,13 @@ def _find_link_by_patterns(soup, current_url, patterns):
 
     return None
 
-
 def find_next_page_link(soup, current_url):
     """查找同一章下一页链接"""
     return _find_link_by_patterns(soup, current_url, COMMON_NEXT_PAGE_PATTERNS)
 
-
 def find_next_chapter_link(soup, current_url):
     """查找下一章链接"""
     return _find_link_by_patterns(soup, current_url, COMMON_NEXT_CHAPTER_PATTERNS)
-
 
 def save_to_txt(chapters_data, filename, mode='a', header=None):
     """追加章节到TXT文件，可写入头部信息"""
@@ -216,7 +212,6 @@ def save_to_txt(chapters_data, filename, mode='a', header=None):
             f.write(title + '\n\n')
             f.write(content + '\n\n')
             f.write('=' * 50 + '\n\n')
-
 
 def generate_html_from_txt(txt_path, novel_name):
     """将TXT转换为HTML阅读器"""
@@ -320,10 +315,8 @@ def generate_html_from_txt(txt_path, novel_name):
         f.write(html_template)
     return html_path
 
-
 def is_directory_page(soup):
     """判断是否为目录页（包含章节列表）"""
-    # 查找常见的章节列表容器
     if soup.select_one('.book-list ul li a'):
         return True
     if soup.select_one('#list a'):
@@ -331,7 +324,6 @@ def is_directory_page(soup):
     if soup.select_one('.chapter-list a'):
         return True
     return False
-
 
 def parse_novel_info_from_directory(soup, base_url):
     """从目录页解析小说名和作者"""
@@ -341,7 +333,6 @@ def parse_novel_info_from_directory(soup, base_url):
     if title_elem:
         info['name'] = title_elem.get_text().strip()
     else:
-        # 尝试从<title>提取
         title_tag = soup.find('title')
         if title_tag:
             title_text = title_tag.get_text().strip()
@@ -353,17 +344,14 @@ def parse_novel_info_from_directory(soup, base_url):
     if author_elem:
         info['author'] = author_elem.get_text().strip()
     else:
-        # 尝试其他常见位置
         author_elem = soup.find('a', href=re.compile(r'/author/'))
         if author_elem:
             info['author'] = author_elem.get_text().strip()
     return info
 
-
 def extract_chapter_links_from_directory(soup, base_url):
     """从目录页提取所有章节链接（绝对URL）"""
     links = []
-    # 使用常见选择器
     for selector in ['.book-list ul li a', '#list a', '.chapter-list a']:
         for a in soup.select(selector):
             href = a.get('href')
@@ -374,7 +362,6 @@ def extract_chapter_links_from_directory(soup, base_url):
         if links:
             break
     return links
-
 
 def fetch_single_chapter(session, chapter_url, log_callback=None):
     """
@@ -406,14 +393,12 @@ def fetch_single_chapter(session, chapter_url, log_callback=None):
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # 提取标题（仅当第一次分页时）
         if chapter_title is None:
             chapter_title = parse_title(soup)
             msg = f"标题：{chapter_title}"
             print(msg)
             if log_callback: log_callback(msg)
 
-        # 提取内容
         page_content = parse_content(soup)
         if page_content:
             chapter_content_parts.append(page_content)
@@ -422,7 +407,6 @@ def fetch_single_chapter(session, chapter_url, log_callback=None):
             print(msg)
             if log_callback: log_callback(msg)
 
-        # 查找下一页（分页）链接
         next_page_url = find_next_page_link(soup, page_url)
         if next_page_url:
             msg = f"找到下一页：{next_page_url}"
@@ -435,7 +419,7 @@ def fetch_single_chapter(session, chapter_url, log_callback=None):
             if log_callback: log_callback(msg)
             time.sleep(delay)
         else:
-            page_url = None  # 无下一页，结束分页循环
+            page_url = None
 
     if chapter_title and chapter_content_parts:
         full_content = '\n\n'.join(chapter_content_parts)
@@ -443,13 +427,16 @@ def fetch_single_chapter(session, chapter_url, log_callback=None):
     else:
         return None, None
 
-def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
+def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
+                existing_chapter_hashes=None, update_meta_callback=None):
     """
     主爬虫函数，自动检测起始页面类型
     :param start_url: 起始 URL（目录页或章节页）
     :param output_dir: 输出目录
     :param log_callback: 日志回调函数
     :param override_name: 手动指定的小说名（若提供则覆盖自动提取，并强制所有章节标题为该名称）
+    :param existing_chapter_hashes: 已下载章节的URL哈希集合（用于增量下载）
+    :param update_meta_callback: 回调函数，每成功下载一章调用，参数为章节URL的哈希值
     """
     session = requests.Session()
     session.verify = False
@@ -465,7 +452,7 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
         msg = "无法获取起始页面，程序终止。"
         print(msg)
         if log_callback: log_callback(msg)
-        return
+        return None, None, None
 
     soup = BeautifulSoup(first_html, 'html.parser')
 
@@ -475,12 +462,10 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
         print(msg)
         if log_callback: log_callback(msg)
 
-        # 解析小说信息（自动提取）
         novel_info = parse_novel_info_from_directory(soup, start_url)
-        # 如果用户指定了名称，则使用用户指定的名称
         if override_name:
             novel_name = override_name
-            author = novel_info['author']  # 作者仍保留自动提取
+            author = novel_info['author']
         else:
             novel_name = novel_info['name']
             author = novel_info['author']
@@ -488,24 +473,38 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
         print(msg)
         if log_callback: log_callback(msg)
 
-        # 提取章节链接
         chapter_links = extract_chapter_links_from_directory(soup, start_url)
         if not chapter_links:
             msg = "未找到任何章节链接，程序终止。"
             print(msg)
             if log_callback: log_callback(msg)
-            return
+            return None, None, None
 
         msg = f"共找到 {len(chapter_links)} 个章节"
         print(msg)
         if log_callback: log_callback(msg)
+
+        # 过滤已存在的章节
+        if existing_chapter_hashes:
+            filtered_links = []
+            for link in chapter_links:
+                link_hash = get_url_hash(link)
+                if link_hash not in existing_chapter_hashes:
+                    filtered_links.append(link)
+                else:
+                    msg = f"章节 {link} 已存在，跳过"
+                    print(msg)
+                    if log_callback: log_callback(msg)
+            chapter_links = filtered_links
+            msg = f"过滤后剩余 {len(chapter_links)} 个新章节"
+            print(msg)
+            if log_callback: log_callback(msg)
 
         safe_name = sanitize_filename(novel_name)
         txt_path = os.path.join(output_dir, safe_name + ".txt")
         if os.path.exists(txt_path):
             os.remove(txt_path)
 
-        # 写入小说头部信息
         header = f"小说名称：{novel_name}\n作者：{author}\n"
         save_to_txt([], txt_path, mode='w', header=header)
 
@@ -517,19 +516,20 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
 
             title, content = fetch_single_chapter(session, chap_url, log_callback)
             if title and content:
-                # ★ 如果手动指定了小说名，则用其替换章节标题
                 if override_name:
                     title = override_name
                 save_to_txt([(title, content)], txt_path, mode='a')
                 msg = f"第 {idx} 章保存成功"
                 print(msg)
                 if log_callback: log_callback(msg)
+                # 通知上层更新元数据
+                if update_meta_callback:
+                    update_meta_callback(get_url_hash(chap_url))
             else:
                 msg = f"第 {idx} 章抓取失败，跳过"
                 print(msg)
                 if log_callback: log_callback(msg)
 
-            # 随机延迟，避免请求过快
             if idx < len(chapter_links):
                 delay = random.uniform(2, 5)
                 msg = f"等待 {delay:.2f} 秒后继续下一章..."
@@ -537,7 +537,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
                 if log_callback: log_callback(msg)
                 time.sleep(delay)
 
-        # 生成HTML
         msg = "抓取完成，正在生成HTML阅读文件..."
         print(msg)
         if log_callback: log_callback(msg)
@@ -554,7 +553,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
         print(msg)
         if log_callback: log_callback(msg)
 
-        # 提取小说名
         if override_name:
             novel_name = override_name
             msg = f"使用用户指定小说名：{novel_name}"
@@ -569,11 +567,57 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
         if os.path.exists(txt_path):
             os.remove(txt_path)
 
+        # 定位到第一个未下载的章节
         current_url = start_url
-        visited_urls = {start_url}
-        chapter_count = 0
+        visited_urls = set()
+        # 如果提供了已有哈希，则跳过已存在的章节
+        while existing_chapter_hashes and current_url and get_url_hash(current_url) in existing_chapter_hashes:
+            msg = f"章节 {current_url} 已存在，尝试跳转到下一章"
+            print(msg)
+            if log_callback: log_callback(msg)
+            # 获取当前页面的下一章链接
+            html = fetch_html(session, current_url, log_callback=log_callback)
+            if not html:
+                break
+            soup = BeautifulSoup(html, 'html.parser')
+            next_url = find_next_chapter_link(soup, current_url)
+            if not next_url or next_url in visited_urls:
+                msg = "无法找到下一章，已无新章节"
+                print(msg)
+                if log_callback: log_callback(msg)
+                current_url = None
+                break
+            visited_urls.add(next_url)
+            current_url = next_url
+            time.sleep(random.uniform(1, 3))
 
+        if not current_url:
+            msg = "没有需要下载的新章节，任务结束"
+            print(msg)
+            if log_callback: log_callback(msg)
+            return novel_name, txt_path, None
+
+        chapter_count = 0
         while current_url:
+            # 再次确认当前章节未下载（安全）
+            if existing_chapter_hashes and get_url_hash(current_url) in existing_chapter_hashes:
+                msg = f"章节 {current_url} 已存在，跳过"
+                print(msg)
+                if log_callback: log_callback(msg)
+                # 查找下一章
+                html = fetch_html(session, current_url, log_callback=log_callback)
+                if html:
+                    soup = BeautifulSoup(html, 'html.parser')
+                    next_url = find_next_chapter_link(soup, current_url)
+                    if next_url and next_url not in visited_urls:
+                        visited_urls.add(next_url)
+                        current_url = next_url
+                        continue
+                    else:
+                        break
+                else:
+                    break
+
             chapter_count += 1
             msg = f"正在抓取第 {chapter_count} 章，起始页：{current_url}"
             print(msg)
@@ -582,40 +626,32 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
             # 抓取本章（含分页）
             title, content = fetch_single_chapter(session, current_url, log_callback)
             if title and content:
-                # ★ 如果手动指定了小说名，则用其替换章节标题
                 if override_name:
                     title = override_name
                 save_to_txt([(title, content)], txt_path, mode='a')
                 msg = f"第 {chapter_count} 章保存成功"
                 print(msg)
                 if log_callback: log_callback(msg)
+                # 通知上层更新元数据
+                if update_meta_callback:
+                    update_meta_callback(get_url_hash(current_url))
             else:
                 msg = "章节内容为空，停止抓取"
                 print(msg)
                 if log_callback: log_callback(msg)
                 break
 
-            # 查找下一章链接（使用最后一页的soup）
-            # 这里我们重新获取最后一页的soup（在fetch_single_chapter中已处理分页，但未返回最后一页的soup）
-            # 简单起见，重新请求当前页获取soup查找下一章链接（也可以从fetch_single_chapter返回soup，但为简化，重新请求）
-            # 注意：可能最后一页有下一章链接，而起始页也有，但重新请求起始页可能导致链接错误，最好在分页循环中保存最后一页的soup。
-            # 为了兼容，我们重新请求当前起始页，但如果分页后下一章链接只在最后一页，则可能找不到。
-            # 改进：在fetch_single_chapter中返回最后一页的soup。这里暂不修改，因为原逻辑已运行多年，可能存在遗漏。
-            # 我们简单重新请求当前起始页查找，如果找不到，再尝试从最后一页查找（但需要保存最后一页soup）。
-            # 由于时间限制，保持原逻辑：直接重新请求当前页。
+            # 查找下一章链接
+            # 获取最后一页的 soup（fetch_single_chapter 未返回，故重新请求当前起始页）
+            # 注意：有可能分页后下一章链接只在最后一页，但大多数网站同时也在起始页有，这里简单处理
             html = fetch_html(session, current_url, log_callback=log_callback)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
-                next_chapter_url = find_next_chapter_link(soup, current_url)
-                if next_chapter_url:
-                    if next_chapter_url in visited_urls:
-                        msg = f"检测到重复章节URL：{next_chapter_url}，停止"
-                        print(msg)
-                        if log_callback: log_callback(msg)
-                        break
-                    visited_urls.add(next_chapter_url)
-                    current_url = next_chapter_url
-                    msg = f"找到下一章：{next_chapter_url}"
+                next_url = find_next_chapter_link(soup, current_url)
+                if next_url and next_url not in visited_urls:
+                    visited_urls.add(next_url)
+                    current_url = next_url
+                    msg = f"找到下一章：{next_url}"
                     print(msg)
                     if log_callback: log_callback(msg)
                     delay = random.uniform(2, 5)
@@ -634,7 +670,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None):
                 if log_callback: log_callback(msg)
                 break
 
-        # 生成HTML
         msg = "抓取完成，正在生成HTML阅读文件..."
         print(msg)
         if log_callback: log_callback(msg)
