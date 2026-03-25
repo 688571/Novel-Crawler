@@ -6,9 +6,9 @@ import time
 import threading
 import json
 import fcntl
-import re
 import tempfile
-
+import hashlib
+import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
 from crawler import run_crawler
 
@@ -22,33 +22,32 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'novels')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 TASKS_FILE = os.path.join(BASE_DIR, 'tasks.json')
-TASKS_LOCK_FILE = TASKS_FILE + '.lock'   # 单独的锁文件
+TASKS_LOCK_FILE = TASKS_FILE + '.lock'   # 锁文件
+META_FILE = os.path.join(BASE_DIR, 'library_meta.json')
+META_LOCK_FILE = META_FILE + '.lock'     # 锁文件
 
-META_FILE = os.path.join(BASE_DIR, 'library_meta.json')   # 新增元数据文件
-
-# ==================== 任务存储（文件版）====================
+# ==================== 任务存储（文件版，原子写入+锁）====================
 def read_tasks():
-    """安全读取任务字典"""
+    """安全读取任务字典（共享锁）"""
     with open(TASKS_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_SH)   # 共享锁
+        fcntl.flock(lock_f, fcntl.LOCK_SH)
         try:
             with open(TASKS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             data = {}
-        fcntl.flock(lock_f, fcntl.LOCK_UN)
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
     return data
 
 def write_tasks(tasks):
-    """原子写入：先写临时文件，再替换原文件"""
+    """原子写入任务字典（独占锁+临时文件替换）"""
     with open(TASKS_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)   # 独占锁
-        # 写入临时文件
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
         fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(TASKS_FILE), prefix='tasks_')
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as temp_f:
                 json.dump(tasks, temp_f, ensure_ascii=False, indent=2)
-            # 原子替换
             os.replace(temp_path, TASKS_FILE)
         except Exception:
             os.unlink(temp_path)
@@ -74,23 +73,59 @@ def append_task_log(task_id, msg):
 def log_message(task_id, msg):
     append_task_log(task_id, msg)
 
-# ==================== 新增：小说元数据读写 ====================
+# ==================== 小说元数据读写（原子写入+锁）====================
 def read_meta():
-    """读取小说元数据（加共享锁）"""
-    if not os.path.exists(META_FILE):
-        return {}
-    with open(META_FILE, 'r', encoding='utf-8') as f:
-        fcntl.flock(f, fcntl.LOCK_SH)
-        data = json.load(f)
-        fcntl.flock(f, fcntl.LOCK_UN)
-    return data
+    """安全读取元数据（共享锁）"""
+    with open(META_LOCK_FILE, 'w') as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_SH)
+        try:
+            with open(META_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 def write_meta(meta):
-    """写入小说元数据（加独占锁）"""
-    with open(META_FILE, 'w', encoding='utf-8') as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        json.dump(meta, f, ensure_ascii=False, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    """原子写入元数据（独占锁+临时文件替换）"""
+    with open(META_LOCK_FILE, 'w') as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
+        fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(META_FILE), prefix='meta_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as temp_f:
+                json.dump(meta, temp_f, ensure_ascii=False, indent=2)
+            os.replace(temp_path, META_FILE)
+        except Exception:
+            os.unlink(temp_path)
+            raise
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+# ==================== 章节哈希处理 ====================
+def get_chapter_hash(url):
+    """返回URL的MD5哈希值，作为章节唯一标识"""
+    return hashlib.md5(url.encode('utf-8')).hexdigest()
+
+def get_existing_chapter_hashes(filename):
+    """从元数据中读取已下载章节的URL哈希集合"""
+    meta = read_meta()
+    file_meta = meta.get(filename, {})
+    return set(file_meta.get('chapters', []))
+
+def add_chapter_hashes(filename, new_hashes):
+    """将新下载的章节哈希追加到元数据中"""
+    meta = read_meta()
+    if filename not in meta:
+        meta[filename] = {}
+    existing = set(meta[filename].get('chapters', []))
+    existing.update(new_hashes)
+    meta[filename]['chapters'] = list(existing)
+    meta[filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    write_meta(meta)
+
+def sanitize_filename(name):
+    """清理文件名中的非法字符"""
+    return re.sub(r'[\\/*?:"<>|\s]', '_', name)
 
 # ==================== 小说库功能 ====================
 def get_novel_list():
@@ -107,7 +142,6 @@ def get_novel_list():
             mtime = os.path.getmtime(filepath)
             size = os.path.getsize(filepath)
 
-            # 从元数据获取自定义名称，否则使用文件名（去掉扩展名）
             file_meta = meta.get(filename, {})
             display_name = file_meta.get('custom_name', filename[:-4])
 
@@ -156,7 +190,10 @@ def index():
 def start_crawl():
     """启动爬虫（后台线程）"""
     start_url = request.form.get('url')
-    novel_name_input = request.form.get('novel_name', '').strip()  # 获取输入的小说名
+    novel_name_input = request.form.get('novel_name', '').strip()
+    # 增量模式：默认为增量，前端可加参数；这里先设定为增量，也可以从表单获取
+    incremental = request.form.get('incremental', 'true').lower() == 'true'
+
     if not start_url:
         return jsonify({'error': 'URL不能为空'}), 400
 
@@ -171,21 +208,34 @@ def start_crawl():
     }
     save_task(task_id, task)
 
-    def task_worker(task_id, start_url, novel_name_input):
+    # 准备已有章节哈希
+    existing_hashes = set()
+    if incremental and novel_name_input:
+        safe_name = sanitize_filename(novel_name_input)
+        existing_hashes = get_existing_chapter_hashes(safe_name + ".txt")
+
+    def task_worker(task_id, start_url, novel_name_input, existing_hashes, incremental):
         log_message(task_id, f"任务 {task_id} 启动，起始URL: {start_url}")
         if novel_name_input:
             log_message(task_id, f"用户指定小说名: {novel_name_input}")
+        if incremental:
+            log_message(task_id, f"增量模式启用，已有章节数: {len(existing_hashes)}")
+        else:
+            log_message(task_id, "覆盖模式，将重新下载全部章节")
         try:
+            # 调用爬虫，传入已有哈希
             novel_name, txt_path, html_path = run_crawler(
                 start_url=start_url,
                 output_dir=OUTPUT_DIR,
                 log_callback=lambda msg: log_message(task_id, msg),
-                override_name=novel_name_input if novel_name_input else None  # 传递参数
+                override_name=novel_name_input if novel_name_input else None,
+                existing_chapter_hashes=existing_hashes if incremental else None
+                # 如果 incremental 为 False，传 None 表示重新下载全部
             )
             safe_name = os.path.splitext(os.path.basename(html_path))[0]
             task = get_task(task_id)
             task['status'] = 'finished'
-            task['novel_name'] = novel_name   # 这里novel_name是run_crawler返回的（可能是自动提取或覆盖后的）
+            task['novel_name'] = novel_name
             task['safe_name'] = safe_name
             task['html_path'] = html_path
             save_task(task_id, task)
@@ -198,7 +248,7 @@ def start_crawl():
             task['status'] = 'error'
             save_task(task_id, task)
 
-    thread = threading.Thread(target=task_worker, args=(task_id, start_url, novel_name_input))
+    thread = threading.Thread(target=task_worker, args=(task_id, start_url, novel_name_input, existing_hashes, incremental))
     thread.daemon = True
     thread.start()
     return redirect(url_for('logs', task_id=task_id))
@@ -213,7 +263,6 @@ def rename_novel():
     if not filename or not new_name:
         return jsonify(success=False, error='缺少参数'), 400
 
-    # 安全检查：防止路径遍历
     if '..' in filename or '/' in filename or '\\' in filename:
         return jsonify(success=False, error='非法文件名'), 400
 
@@ -221,18 +270,15 @@ def rename_novel():
     if not os.path.exists(filepath):
         return jsonify(success=False, error='文件不存在'), 404
 
-    # 读取元数据并更新
     meta = read_meta()
     if filename not in meta:
         meta[filename] = {}
     meta[filename]['custom_name'] = new_name.strip()
     meta[filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
-
     write_meta(meta)
 
     return jsonify(success=True, new_name=new_name)
 
-# ==================== 新增删除路由 ====================
 @app.route('/delete', methods=['POST'])
 def delete_novel():
     """删除小说文件及其元数据"""
@@ -242,7 +288,6 @@ def delete_novel():
     if not filename:
         return jsonify(success=False, error='缺少文件名'), 400
 
-    # 安全检查：防止路径遍历
     if '..' in filename or '/' in filename or '\\' in filename:
         return jsonify(success=False, error='非法文件名'), 400
 
@@ -251,15 +296,11 @@ def delete_novel():
         return jsonify(success=False, error='文件不存在'), 404
 
     try:
-        # 删除文件
         os.remove(filepath)
-
-        # 同时删除元数据中对应的条目（可选但推荐）
         meta = read_meta()
         if filename in meta:
             del meta[filename]
             write_meta(meta)
-
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
