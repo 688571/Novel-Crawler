@@ -7,6 +7,8 @@ import threading
 import json
 import fcntl
 import re
+import tempfile
+
 from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
 from crawler import run_crawler
 
@@ -20,25 +22,39 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'novels')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 TASKS_FILE = os.path.join(BASE_DIR, 'tasks.json')
+TASKS_LOCK_FILE = TASKS_FILE + '.lock'   # 单独的锁文件
+
 META_FILE = os.path.join(BASE_DIR, 'library_meta.json')   # 新增元数据文件
 
 # ==================== 任务存储（文件版）====================
 def read_tasks():
-    """读取任务字典（加共享锁）"""
-    if not os.path.exists(TASKS_FILE):
-        return {}
-    with open(TASKS_FILE, 'r', encoding='utf-8') as f:
-        fcntl.flock(f, fcntl.LOCK_SH)
-        data = json.load(f)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    """安全读取任务字典"""
+    with open(TASKS_LOCK_FILE, 'w') as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_SH)   # 共享锁
+        try:
+            with open(TASKS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        fcntl.flock(lock_f, fcntl.LOCK_UN)
     return data
 
 def write_tasks(tasks):
-    """写入任务字典（加独占锁）"""
-    with open(TASKS_FILE, 'w', encoding='utf-8') as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        json.dump(tasks, f, ensure_ascii=False, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    """原子写入：先写临时文件，再替换原文件"""
+    with open(TASKS_LOCK_FILE, 'w') as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)   # 独占锁
+        # 写入临时文件
+        fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(TASKS_FILE), prefix='tasks_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as temp_f:
+                json.dump(tasks, temp_f, ensure_ascii=False, indent=2)
+            # 原子替换
+            os.replace(temp_path, TASKS_FILE)
+        except Exception:
+            os.unlink(temp_path)
+            raise
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 def get_task(task_id):
     tasks = read_tasks()
