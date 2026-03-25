@@ -1,6 +1,7 @@
-# Novel Crawler & Reader / 小说爬虫与阅读系统
+# Novel Crawler & Reader 小说爬虫与阅读系统
 这是一个基于 Flask 的轻量级网络小说爬虫 + 本地在线阅读系统。 只需提供小说目录页或任意章节页的 URL，系统即可自动抓取整本小说，保存为 .txt 文件，并生成 HTML 阅读版本。 内置小说库管理，支持重命名、删除和在线阅读。
-
+实现增量下载，更新于 2026.3.25
+Implement incremental download.Updated in 3.25 2026
 [**English**](#english) | [**中文**](#中文)
 
 ---
