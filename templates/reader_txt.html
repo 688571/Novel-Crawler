@@ -805,14 +805,13 @@ body.dark .page-down-btn:hover {
         var CONVERT_MODE_KEY = 'convertMode_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
 
         // 自动浏览相关变量
-        // 自动浏览相关变量（优化平滑滚动）
-        var speedLevels = [0, 2, 3, 5, 7, 9];      // 速度档位（单位：每100ms像素数，保持与原逻辑一致）
-        var currentSpeedIndex = 0;                  // 当前档位索引（0对应停止）
-        var autoSpeed = speedLevels[currentSpeedIndex]; // 当前速度值（0-9）
-        var rafId = null;                           // requestAnimationFrame ID
-        var lastTimestamp = null;                    // 上一帧时间戳
-        var remainder = 0;                           // 亚像素滚动累积
-        var pixelsPerSecond = 0;                      // 换算后的每秒滚动像素（autoSpeed * 10）
+        var speedLevels = [0, 2, 3, 5, 7, 9];      
+        var currentSpeedIndex = 0;                  
+        var autoSpeed = speedLevels[currentSpeedIndex]; 
+        var rafId = null;                           
+        var lastTimestamp = null;                    
+        var remainder = 0;                           
+        var pixelsPerSecond = 0;                     
 
         // 记录当前已应用的转换模式
         var appliedConvertMode = null;
@@ -831,9 +830,8 @@ body.dark .page-down-btn:hover {
             }
         }
 
-        // 自动滚动当前章节目录项到可视区域（顶部和底部）
+        // 自动滚动当前章节目录项到可视区域
         function scrollCurrentChapterIntoView() {
-            // 顶部目录
             var topCurrentLink = document.querySelector('#top-chapter-list a.current');
             if (topCurrentLink) {
                 var topContainer = document.querySelector('#top-chapter-list');
@@ -844,7 +842,6 @@ body.dark .page-down-btn:hover {
                 }
             }
 
-            // 底部目录
             var bottomCurrentLink = document.querySelector('.chapter-list a.current');
             if (bottomCurrentLink) {
                 var bottomContainer = document.querySelector('.chapter-list');
@@ -869,179 +866,14 @@ body.dark .page-down-btn:hover {
             topChapterList.innerHTML = html;
         }
 
-        // 应用保存的转换模式
-        function applySavedConvertMode() {
-            try {
-                var savedMode = localStorage.getItem(CONVERT_MODE_KEY);
-                if (savedMode && (savedMode === 's2t' || savedMode === 't2s')) {
-                    if (appliedConvertMode !== savedMode) {
-                        convertText(savedMode, false);
-                    }
-                }
-            } catch (e) {}
-        }
-
-        // 渲染当前章节
-        function renderChapter(index) {
-            var chapter = chaptersData[index];
-            if (!chapter) return;
-
-            var title = chapter.title;
-            var contentHtml = chapter.content;
-
-            var html = '<section id="chap' + (index+1) + '">';
-            html += '<h2>' + title + '</h2>';
-            html += contentHtml;
-            html += '<div class="nav-links">';
-            html += '<a ' + (index > 0 ? 'onclick="goToChapter(' + (index-1) + ')"' : 'class="disabled"') + '>上一章</a>';
-            html += '<a onclick="goToToc()">目录</a>';
-            html += '<a ' + (index < chaptersData.length-1 ? 'onclick="goToChapter(' + (index+1) + ')"' : 'class="disabled"') + '>下一章</a>';
-            html += '</div>';
-
-            // 底部章节目录（添加序号）
-            html += '<div class="chapter-directory">';
-            html += '<h3>📑 目录 (共 ' + chaptersData.length + ' 章)</h3>';
-            html += '<div class="chapter-list"><ul>';
-            for (var i = 0; i < chaptersData.length; i++) {
-                var chap = chaptersData[i];
-                var currentClass = (i === index) ? 'current' : '';
-                var displayTitle = (i+1) + '. ' + chap.title;
-                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
-            }
-            html += '</ul></div></div></section>';
-
-            contentFrame.innerHTML = html;
-            currentChapterIndex = index;
-
-            // 渲染顶部目录
-            renderTopToc(index);
-
-            document.title = title + ' - ' + novelName;
-            window.location.hash = 'chap' + (index+1);
-            saveBookmark(index);
-
-            // 应用保存的简繁模式
-            applySavedConvertMode();
-
-            setTimeout(scrollCurrentChapterIntoView, 50);
-        }
-
-        window.goToChapter = function(index) {
-            if (index >= 0 && index < chaptersData.length) {
-                stopAutoScroll();
-                renderChapter(index);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        };
-
-        function goToToc() {
-            var directory = document.querySelector('.chapter-directory');
-            if (directory) directory.scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // 初始化章节
-        function initFromHashOrBookmark() {
-            var hash = window.location.hash;
-            var targetIndex = null;
-            if (hash && hash.startsWith('#chap')) {
-                var num = parseInt(hash.substring(5), 10);
-                if (!isNaN(num) && num >= 1 && num <= chaptersData.length) targetIndex = num - 1;
-            }
-            if (targetIndex === null) targetIndex = loadBookmark();
-            if (targetIndex === null || targetIndex < 0 || targetIndex >= chaptersData.length) targetIndex = 0;
-            renderChapter(targetIndex);
-        }
-
-        // ---------- 自动浏览功能：点击循环速度 ----------
-        // 开始自动平滑滚动
-function startAutoScroll() {
-    if (autoSpeed === 0) return;          // 速度为0不启动
-    if (rafId) return;                     // 已经滚动中
-
-    pixelsPerSecond = autoSpeed * 10;       // 保持与原速度一致（原每100ms滚动autoSpeed像素）
-    lastTimestamp = null;
-    remainder = 0;
-
-    function step(timestamp) {
-        if (autoSpeed === 0) {              // 运行中速度被置为0则停止
-            stopAutoScroll();
-            return;
-        }
-
-        // 初始化上一帧时间戳
-        if (lastTimestamp === null) {
-            lastTimestamp = timestamp;
-            rafId = requestAnimationFrame(step);
-            return;
-        }
-
-        // 计算时间差（限制最大步长100ms，防止切后台后突跳）
-        var delta = Math.min(100, timestamp - lastTimestamp);
-        if (delta > 5) {  // 仅当时间差大于5ms时才移动，避免过于频繁的无意义计算
-            // 根据时间差计算本次应滚动的像素（含亚像素累积）
-            var move = (delta / 1000) * pixelsPerSecond + remainder;
-            var intMove = Math.floor(move);      // 整数部分立即滚动
-            remainder = move - intMove;           // 小数部分存留到下一帧
-
-            if (intMove !== 0) {
-                // 检测是否即将滚动到底部，若是则直接滚动到底并停止
-                var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-                var newScrollY = window.scrollY + intMove;
-
-                if (newScrollY >= maxScroll) {
-                    window.scrollTo(0, maxScroll);
-                    stopAutoScroll();  // 到底后自动停止
-                    return;
-                } else {
-                    window.scrollBy(0, intMove);
-                }
-            }
-        }
-
-        lastTimestamp = timestamp;
-        rafId = requestAnimationFrame(step);
-    }
-
-    rafId = requestAnimationFrame(step);
-}
-
-// 停止自动滚动
-function stopAutoScroll() {
-    if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-    }
-    lastTimestamp = null;
-    remainder = 0;
-}
-
-// 点击悬浮按钮：循环切换速度档位，并重启滚动
-window.cycleAutoSpeed = function() {
-    currentSpeedIndex = (currentSpeedIndex + 1) % speedLevels.length;
-    autoSpeed = speedLevels[currentSpeedIndex];
-
-    // 更新按钮文字
-    if (autoSpeed === 0) {
-        autoScrollBtn.textContent = '▷';
-    } else {
-        autoScrollBtn.textContent = autoSpeed + 'X';
-    }
-
-    // 停止当前滚动（如有），再按新速度启动
-    stopAutoScroll();
-    if (autoSpeed > 0) {
-        startAutoScroll();
-    }
-};
-
-        // ---------- 简繁转换功能 (独立按钮) ----------
-        function convertText(mode, save = true) {
+        // ---------- 核心：简繁转换函数 (支持强制转换) ----------
+        function convertText(mode, save = true, force = false) {
             if (typeof OpenCC === 'undefined') {
-                alert('简繁转换库加载失败，请刷新页面重试。如果问题持续，请检查网络。');
+                alert('简繁转换库加载失败，请刷新页面重试。');
                 return;
             }
-
-            if (appliedConvertMode === mode) return;
+            // 如果不是强制模式，且模式与已应用模式相同，则跳过
+            if (!force && appliedConvertMode === mode) return;
 
             const converter = OpenCC.Converter({
                 from: mode === 's2t' ? 'cn' : 'tw',
@@ -1074,28 +906,184 @@ window.cycleAutoSpeed = function() {
             }
         }
 
+        // 强制应用存储的偏好模式 (默认简体)
+        function forceApplyStoredMode() {
+            let storedMode = null;
+            try {
+                storedMode = localStorage.getItem(CONVERT_MODE_KEY);
+            } catch(e) {}
+            // 默认模式为简体转换 (t2s: 繁体->简体)
+            let targetMode = 't2s';
+            if (storedMode && (storedMode === 's2t' || storedMode === 't2s')) {
+                targetMode = storedMode;
+            } else {
+                // 无存储则写入默认简体模式
+                try {
+                    localStorage.setItem(CONVERT_MODE_KEY, 't2s');
+                } catch(e) {}
+            }
+            // 强制转换，忽略当前 appliedConvertMode
+            convertText(targetMode, false, true);
+        }
+
+        // 切换简繁 (点击悬浮按钮)
         window.toggleConvert = function() {
             var currentText = convertFloat.textContent;
             var targetMode = currentText === '简' ? 's2t' : 't2s';
-            convertText(targetMode, true);
+            convertText(targetMode, true, false);
         };
 
+        // 初始化按钮显示及默认模式
         function initConvertButton() {
+            let savedMode = null;
             try {
-                var savedMode = localStorage.getItem(CONVERT_MODE_KEY);
-                if (savedMode === 's2t') {
-                    convertFloat.textContent = '繁';
-                } else if (savedMode === 't2s') {
-                    convertFloat.textContent = '简';
-                } else {
-                    convertFloat.textContent = '简';
-                }
-            } catch (e) {
-                convertFloat.textContent = '简';
+                savedMode = localStorage.getItem(CONVERT_MODE_KEY);
+            } catch(e) {}
+            if (!savedMode || (savedMode !== 's2t' && savedMode !== 't2s')) {
+                savedMode = 't2s';
+                try {
+                    localStorage.setItem(CONVERT_MODE_KEY, 't2s');
+                } catch(e) {}
             }
+            appliedConvertMode = savedMode;
+            convertFloat.textContent = savedMode === 's2t' ? '繁' : '简';
         }
 
-        // ---------- 原有设置功能保持不变 ----------
+        // 渲染当前章节
+        function renderChapter(index) {
+            var chapter = chaptersData[index];
+            if (!chapter) return;
+
+            var title = chapter.title;
+            var contentHtml = chapter.content;
+
+            var html = '<section id="chap' + (index+1) + '">';
+            html += '<h2>' + title + '</h2>';
+            html += contentHtml;
+            html += '<div class="nav-links">';
+            html += '<a ' + (index > 0 ? 'onclick="goToChapter(' + (index-1) + ')"' : 'class="disabled"') + '>上一章</a>';
+            html += '<a onclick="goToToc()">目录</a>';
+            html += '<a ' + (index < chaptersData.length-1 ? 'onclick="goToChapter(' + (index+1) + ')"' : 'class="disabled"') + '>下一章</a>';
+            html += '</div>';
+
+            // 底部章节目录
+            html += '<div class="chapter-directory">';
+            html += '<h3>📑 目录 (共 ' + chaptersData.length + ' 章)</h3>';
+            html += '<div class="chapter-list"><ul>';
+            for (var i = 0; i < chaptersData.length; i++) {
+                var chap = chaptersData[i];
+                var currentClass = (i === index) ? 'current' : '';
+                var displayTitle = (i+1) + '. ' + chap.title;
+                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
+            }
+            html += '</ul></div></div></section>';
+
+            contentFrame.innerHTML = html;
+            currentChapterIndex = index;
+
+            renderTopToc(index);
+            document.title = title + ' - ' + novelName;
+            window.location.hash = 'chap' + (index+1);
+            saveBookmark(index);
+
+            // 关键修复：每次渲染新章节后，强制应用用户偏好的简繁模式（默认简体）
+            forceApplyStoredMode();
+
+            setTimeout(scrollCurrentChapterIntoView, 50);
+        }
+
+        window.goToChapter = function(index) {
+            if (index >= 0 && index < chaptersData.length) {
+                stopAutoScroll();
+                renderChapter(index);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        };
+
+        function goToToc() {
+            var directory = document.querySelector('.chapter-directory');
+            if (directory) directory.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 初始化章节
+        function initFromHashOrBookmark() {
+            var hash = window.location.hash;
+            var targetIndex = null;
+            if (hash && hash.startsWith('#chap')) {
+                var num = parseInt(hash.substring(5), 10);
+                if (!isNaN(num) && num >= 1 && num <= chaptersData.length) targetIndex = num - 1;
+            }
+            if (targetIndex === null) targetIndex = loadBookmark();
+            if (targetIndex === null || targetIndex < 0 || targetIndex >= chaptersData.length) targetIndex = 0;
+            renderChapter(targetIndex);
+        }
+
+        // ---------- 自动浏览功能 ----------
+        function startAutoScroll() {
+            if (autoSpeed === 0) return;
+            if (rafId) return;
+
+            pixelsPerSecond = autoSpeed * 10;
+            lastTimestamp = null;
+            remainder = 0;
+
+            function step(timestamp) {
+                if (autoSpeed === 0) {
+                    stopAutoScroll();
+                    return;
+                }
+                if (lastTimestamp === null) {
+                    lastTimestamp = timestamp;
+                    rafId = requestAnimationFrame(step);
+                    return;
+                }
+                var delta = Math.min(100, timestamp - lastTimestamp);
+                if (delta > 5) {
+                    var move = (delta / 1000) * pixelsPerSecond + remainder;
+                    var intMove = Math.floor(move);
+                    remainder = move - intMove;
+                    if (intMove !== 0) {
+                        var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+                        var newScrollY = window.scrollY + intMove;
+                        if (newScrollY >= maxScroll) {
+                            window.scrollTo(0, maxScroll);
+                            stopAutoScroll();
+                            return;
+                        } else {
+                            window.scrollBy(0, intMove);
+                        }
+                    }
+                }
+                lastTimestamp = timestamp;
+                rafId = requestAnimationFrame(step);
+            }
+            rafId = requestAnimationFrame(step);
+        }
+
+        function stopAutoScroll() {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            lastTimestamp = null;
+            remainder = 0;
+        }
+
+        window.cycleAutoSpeed = function() {
+            currentSpeedIndex = (currentSpeedIndex + 1) % speedLevels.length;
+            autoSpeed = speedLevels[currentSpeedIndex];
+            if (autoSpeed === 0) {
+                autoScrollBtn.textContent = '▷';
+            } else {
+                autoScrollBtn.textContent = autoSpeed + 'X';
+            }
+            stopAutoScroll();
+            if (autoSpeed > 0) {
+                startAutoScroll();
+            }
+        };
+
+        // ---------- 阅读设置部分 (保持不变，功能完好) ----------
         (function() {
             const controlPanel = document.getElementById('controlPanel');
             const readerContainer = document.querySelector('.reader-container');
@@ -1138,7 +1126,6 @@ window.cycleAutoSpeed = function() {
                 try {
                     const settings = JSON.parse(saved);
                     isLoading = true;
-
                     if (settings.theme) {
                         document.body.className = settings.theme;
                         themeButtons.forEach(btn => {
@@ -1151,7 +1138,6 @@ window.cycleAutoSpeed = function() {
                             }
                         });
                     }
-
                     if (settings.fontSize) {
                         fontSizeSlider.value = settings.fontSize;
                         fontSizeSpan.textContent = settings.fontSize + 'px';
@@ -1182,7 +1168,6 @@ window.cycleAutoSpeed = function() {
                         document.body.style.color = settings.textColor;
                         contentFrame.style.color = settings.textColor;
                     }
-
                     isLoading = false;
                 } catch (e) { isLoading = false; }
             }
@@ -1192,7 +1177,6 @@ window.cycleAutoSpeed = function() {
                 document.body.className = theme;
                 themeButtons.forEach(btn => btn.classList.remove('active'));
                 event.target.classList.add('active');
-
                 if (theme === 'light') {
                     bgColorPicker.value = '#ffffff';
                     textColorPicker.value = '#333333';
@@ -1267,17 +1251,18 @@ window.cycleAutoSpeed = function() {
                 readerContainer.style.filter = 'brightness(100%)';
             }
         })();
-// 向下翻页功能（新增）
-window.pageDown = function() {
-    window.scrollBy({
-        top: window.innerHeight,
-        behavior: 'smooth'
-    });
-};
-        // 初始化转换按钮状态
-        initConvertButton();
 
-        // 初始化
+        // 向下翻页功能
+        window.pageDown = function() {
+            window.scrollBy({
+                top: window.innerHeight,
+                behavior: 'smooth'
+            });
+        };
+
+        // 初始化转换按钮状态及默认模式
+        initConvertButton();
+        // 启动阅读器
         initFromHashOrBookmark();
     </script>
 </body>
