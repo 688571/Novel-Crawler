@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
-    <title>TT小说库</title>
+    <title>TT小说库 - 书架</title>
     <style>
         body {
             font-family: 'Microsoft YaHei', sans-serif;
@@ -19,12 +19,39 @@
             box-shadow: 0 5px 20px rgba(0,0,0,0.1);
             padding: 20px;
         }
+        .header-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 12px;
+        }
         h1 {
             color: #2c3e50;
             border-left: 5px solid #3498db;
             padding-left: 15px;
-            margin-top: 0;
+            margin: 0;
             font-size: 24px;
+            flex: 1;
+        }
+        .lang-switch {
+            background: #f0f2f5;
+            border: 1px solid #dcdfe6;
+            color: #2c3e50;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lang-switch:hover {
+            background: #e6e9f0;
+            border-color: #3498db;
         }
         .btn {
             background: #3498db;
@@ -42,7 +69,6 @@
         .btn:hover {
             background: #2980b9;
         }
-        /* 移动端卡片式列表 */
         .novel-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -110,7 +136,6 @@
         .edit-btn:hover {
             background: #27ae60;
         }
-        /* 新增删除按钮样式 */
         .delete-btn {
             background: #e74c3c;
             color: white;
@@ -133,83 +158,210 @@
             color: #7f8c8d;
         }
 
-        /* 手机端优化 */
-       @media (max-width: 600px) {
-    .container {
-        padding: 15px;
-    }
-    h1 {
-        font-size: 22px;
-    }
-    .novel-grid {
-        grid-template-columns: 1fr;
-    }
-    .btn {
-        display: block;
-        text-align: center;
-        margin-right: 0;
-    }
-    /* 按钮容器改为水平排列，并减小间距 */
-    .card-actions {
-        flex-direction: row;      /* 改为水平排列 */
-        gap: 5px;                 /* 缩小按钮之间的间距 */
-    }
-    /* 三个按钮统一调整内边距和字体，确保一行显示 */
-    .card-actions .read-btn,
-    .card-actions .edit-btn,
-    .card-actions .delete-btn {
-        padding-left: 6px;
-        padding-right: 6px;
-        font-size: 13px;          /* 略微减小字体 */
-        white-space: nowrap;       /* 强制文字不换行 */
-    }
-}
-
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            .header-row {
+                flex-direction: row;
+                align-items: center;
+            }
+            h1 {
+                font-size: 22px;
+            }
+            .novel-grid {
+                grid-template-columns: 1fr;
+            }
+            .btn {
+                display: inline-block;
+                text-align: center;
+                margin-right: 8px;
+            }
+            .card-actions {
+                flex-direction: row;
+                gap: 5px;
+            }
+            .card-actions .read-btn,
+            .card-actions .edit-btn,
+            .card-actions .delete-btn {
+                padding-left: 6px;
+                padding-right: 6px;
+                font-size: 13px;
+                white-space: nowrap;
+            }
+            .lang-switch {
+                padding: 6px 14px;
+                font-size: 13px;
+            }
+        }
     </style>
+    <!-- 引入 opencc-js 完整版，支持简繁互转 -->
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>📚 TT小说库</h1>
-        <a href="/console" class="btn">⚙️ 爬虫控制台</a>
+        <div class="header-row">
+            <h1 class="convertible">📚 TT小说库</h1>
+            <button id="toggleLangBtn" class="lang-switch">🌐 繁體</button>
+        </div>
+        <a href="/console" class="btn convertible">⚙️ 爬虫控制台</a>
+        
         {% if novels %}
         <div class="novel-grid">
             {% for novel in novels %}
             <div class="novel-card" data-filename="{{ novel.filename }}">
-                <h3 class="novel-name">{{ novel.name }}</h3>
+                <h3 class="novel-name convertible">{{ novel.name }}</h3>
                 <div class="novel-meta">
-                    <span>📁 {{ novel.size }}</span>
-                    <span>🕒 {{ novel.mtime[:10] }}</span>
+                    <span class="convertible">📁 {{ novel.size }}</span>
+                    <span class="convertible">🕒 {{ novel.mtime[:10] }}</span>
                 </div>
                 <div class="card-actions">
-                    <a href="{{ url_for('read_novel', filename=novel.filename) }}" class="read-btn">📖 阅读</a>
-                    <button class="edit-btn" onclick="renameNovel(this)">✏️ 改名</button>
-                    <!-- 新增删除按钮 -->
-                    <button class="delete-btn" onclick="deleteNovel(this)">🗑️ 删除</button>
+                    <a href="{{ url_for('read_novel', filename=novel.filename) }}" class="read-btn convertible">📖 阅读</a>
+                    <button class="edit-btn convertible" onclick="renameNovel(this)">✏️ 改名</button>
+                    <button class="delete-btn convertible" onclick="deleteNovel(this)">🗑️ 删除</button>
                 </div>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="empty">暂无小说，请先抓取。</div>
+        <div class="empty convertible">暂无小说，请先抓取。</div>
         {% endif %}
     </div>
 
     <script>
-        // 重命名小说 (原有功能)
+        // ---------- 简繁转换核心 (修复版) ----------
+        // 核心思路：所有可转换元素的“原始基准”统一存储为简体中文，
+        // 这样无论初始显示是什么（可能是繁体或混合），都能确保简繁切换正确。
+        
+        let toTraditionalConverter = null;   // 简体 → 繁体
+        let toSimplifiedConverter = null;    // 繁体 → 简体
+        let isTraditional = false;            // 当前界面是否为繁体模式
+        let convertibleElements = [];          // 存储 { element, originalSimplified }
+        
+        // 初始化 opencc 转换器
+        function initConverters() {
+            if (typeof OpenCC !== 'undefined') {
+                toTraditionalConverter = OpenCC.Converter({ from: 'cn', to: 'tw' });
+                toSimplifiedConverter = OpenCC.Converter({ from: 'tw', to: 'cn' });
+                return true;
+            } else {
+                console.error("OpenCC 库未加载，简繁转换功能不可用");
+                return false;
+            }
+        }
+        
+        // 收集所有带 .convertible 类的元素，并将其文本强制转为简体后存储为原始基准
+        function collectConvertibleElements() {
+            const elements = document.querySelectorAll('.convertible');
+            convertibleElements = [];
+            elements.forEach(el => {
+                let currentText = el.innerText;
+                let simplifiedBase = currentText;
+                
+                // 如果转换器可用，将当前文本转为简体（确保基准是简体）
+                if (toSimplifiedConverter) {
+                    simplifiedBase = toSimplifiedConverter(currentText);
+                }
+                // 存储原始简体文本（若元素已有 data-original-simplified 则不再覆盖，但这里每次都重新收集，故无需保留旧值）
+                el.setAttribute('data-original-simplified', simplifiedBase);
+                convertibleElements.push({
+                    element: el,
+                    originalSimplified: simplifiedBase
+                });
+            });
+            // 可选：调试输出
+            // console.log(`收集到 ${convertibleElements.length} 个可转换元素`);
+        }
+        
+        // 将界面转为繁体（基于存储的简体基准）
+        function applyTraditional() {
+            if (!toTraditionalConverter) {
+                console.warn("简转繁转换器未就绪");
+                return;
+            }
+            convertibleElements.forEach(item => {
+                const simplified = item.originalSimplified;
+                if (simplified) {
+                    item.element.innerText = toTraditionalConverter(simplified);
+                }
+            });
+            isTraditional = true;
+            const toggleBtn = document.getElementById('toggleLangBtn');
+            if (toggleBtn) toggleBtn.innerHTML = '🌐 简体';
+            localStorage.setItem('tt_novel_lang', 'tw');
+        }
+        
+        // 将界面恢复为简体（直接显示存储的简体基准）
+        function applySimplified() {
+            convertibleElements.forEach(item => {
+                item.element.innerText = item.originalSimplified;
+            });
+            isTraditional = false;
+            const toggleBtn = document.getElementById('toggleLangBtn');
+            if (toggleBtn) toggleBtn.innerHTML = '🌐 繁體';
+            localStorage.setItem('tt_novel_lang', 'cn');
+        }
+        
+        // 切换语言
+        function toggleLanguage() {
+            if (isTraditional) {
+                applySimplified();
+            } else {
+                applyTraditional();
+            }
+        }
+        
+        // 从 localStorage 加载用户偏好并应用
+        function loadLanguagePreference() {
+            const savedLang = localStorage.getItem('tt_novel_lang');
+            if (savedLang === 'tw') {
+                // 用户偏好繁体
+                if (toTraditionalConverter && convertibleElements.length > 0) {
+                    applyTraditional();
+                } else {
+                    // 转换器或元素未准备好，稍后重试
+                    setTimeout(() => {
+                        if (toTraditionalConverter && convertibleElements.length > 0 && localStorage.getItem('tt_novel_lang') === 'tw') {
+                            applyTraditional();
+                        }
+                    }, 100);
+                }
+            } else {
+                // 默认简体，确保界面为简体
+                if (convertibleElements.length > 0) {
+                    applySimplified();
+                }
+            }
+        }
+        
+        // ---------- 重命名与删除功能（修复：重命名时强制转为简体提交）----------
         function renameNovel(button) {
             const card = button.closest('.novel-card');
             const filename = card.dataset.filename;
-            const currentName = card.querySelector('.novel-name').innerText;
-
-            const newName = prompt('请输入新的小说名称', currentName);
-            if (!newName || newName.trim() === '' || newName === currentName) {
+            const nameElement = card.querySelector('.novel-name');
+            // 获取原始简体名称（从 data-original-simplified 取，确保 prompt 显示简体）
+            let currentSimplifiedName = nameElement ? (nameElement.getAttribute('data-original-simplified') || nameElement.innerText) : '';
+            
+            let newName = prompt('请输入新的小说名称', currentSimplifiedName);
+            if (!newName || newName.trim() === '') {
                 return;
             }
-
+            newName = newName.trim();
+            // 如果新名称和当前相同，不做操作
+            if (newName === currentSimplifiedName) {
+                return;
+            }
+            
+            // 重要：将用户输入的名称转为简体后再发送给后端，保证数据库存储的是简体，避免后续转换混乱
+            let finalName = newName;
+            if (toSimplifiedConverter) {
+                finalName = toSimplifiedConverter(newName);
+            }
+            
             fetch('/rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: filename, new_name: newName.trim() })
+                body: JSON.stringify({ filename: filename, new_name: finalName })
             })
             .then(async response => {
                 if (!response.ok) {
@@ -220,7 +372,7 @@
             })
             .then(data => {
                 if (data.success) {
-                    location.reload();  // 刷新页面显示新名称
+                    location.reload();  // 刷新后重新收集并应用语言偏好
                 } else {
                     alert('修改失败：' + (data.error || '未知错误'));
                 }
@@ -229,19 +381,17 @@
                 alert('请求出错：' + error.message);
             });
         }
-
-        // 新增删除功能
+        
         function deleteNovel(button) {
             const card = button.closest('.novel-card');
             const filename = card.dataset.filename;
-            const novelName = card.querySelector('.novel-name').innerText;
-
-            // 确认删除
+            const nameElement = card.querySelector('.novel-name');
+            let novelName = nameElement ? (nameElement.getAttribute('data-original-simplified') || nameElement.innerText) : '未知';
+            
             if (!confirm(`确定要删除小说《${novelName}》吗？此操作不可恢复。`)) {
                 return;
             }
-
-            // 发送删除请求 (使用 POST 方法，后端需对应 /delete 路由)
+            
             fetch('/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -256,7 +406,6 @@
             })
             .then(data => {
                 if (data.success) {
-                    // 删除成功，刷新列表
                     location.reload();
                 } else {
                     alert('删除失败：' + (data.error || '未知错误'));
@@ -265,6 +414,68 @@
             .catch(error => {
                 alert('请求出错：' + error.message);
             });
+        }
+        
+        // 全局挂载函数供内联 onclick 调用
+        window.renameNovel = renameNovel;
+        window.deleteNovel = deleteNovel;
+        
+        // ---------- 页面初始化流程 ----------
+        function initPage() {
+            // 1. 初始化转换器
+            const converterReady = initConverters();
+            if (!converterReady) {
+                // 若库未加载，等待一段时间重试
+                let retryCount = 0;
+                const maxRetries = 10;
+                const interval = setInterval(() => {
+                    if (typeof OpenCC !== 'undefined') {
+                        clearInterval(interval);
+                        initConverters();
+                        collectConvertibleElements();
+                        loadLanguagePreference();
+                    } else if (++retryCount >= maxRetries) {
+                        clearInterval(interval);
+                        console.warn("OpenCC 库加载失败，简繁转换功能不可用");
+                        // 仍尝试收集元素，但转换功能不可用，仅显示默认文字
+                        collectConvertibleElements();
+                    }
+                }, 200);
+                return;
+            }
+            
+            // 2. 收集所有可转换元素（此时转换器已就绪，确保收集时能转为简体）
+            collectConvertibleElements();
+            
+            // 3. 加载用户语言偏好并应用
+            loadLanguagePreference();
+        }
+        
+        // 绑定切换按钮事件
+        function bindToggleEvent() {
+            const toggleBtn = document.getElementById('toggleLangBtn');
+            if (toggleBtn) {
+                // 避免重复绑定
+                const newBtn = toggleBtn.cloneNode(true);
+                toggleBtn.parentNode.replaceChild(newBtn, toggleBtn);
+                newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    toggleLanguage();
+                });
+            } else {
+                setTimeout(bindToggleEvent, 100);
+            }
+        }
+        
+        // 启动页面初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                initPage();
+                bindToggleEvent();
+            });
+        } else {
+            initPage();
+            bindToggleEvent();
         }
     </script>
 </body>
