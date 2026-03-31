@@ -10,12 +10,16 @@ import tempfile
 import hashlib
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
+
+# ==================== 导入爬虫模块 ====================
 from crawler import run_crawler
 
 # ==================== 基础配置 ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'))
+# 限制上传文件最大为 3MB
+app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024
 print("模板文件夹路径:", app.template_folder)
 
 OUTPUT_DIR = os.path.join(BASE_DIR, 'novels')
@@ -25,6 +29,11 @@ TASKS_FILE = os.path.join(BASE_DIR, 'tasks.json')
 TASKS_LOCK_FILE = TASKS_FILE + '.lock'   # 锁文件
 META_FILE = os.path.join(BASE_DIR, 'library_meta.json')
 META_LOCK_FILE = META_FILE + '.lock'     # 锁文件
+
+# ==================== 错误处理 ====================
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({'error': '文件大小超过 3MB 限制'}), 413
 
 # ==================== 任务存储（文件版，原子写入+锁）====================
 def read_tasks():
@@ -127,6 +136,34 @@ def sanitize_filename(name):
     """清理文件名中的非法字符"""
     return re.sub(r'[\\/*?:"<>|\s]', '_', name)
 
+# ==================== 上传辅助函数 ====================
+def get_unique_filepath(filepath):
+    """如果文件已存在，自动添加序号 (1), (2)..."""
+    if not os.path.exists(filepath):
+        return filepath
+    base, ext = os.path.splitext(filepath)
+    counter = 1
+    while True:
+        new_path = f"{base} ({counter}){ext}"
+        if not os.path.exists(new_path):
+            return new_path
+        counter += 1
+
+def safe_read_txt(content_bytes):
+    """尝试多种编码，返回统一 UTF-8 字符串"""
+    # 优先尝试 UTF-8
+    try:
+        return content_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        pass
+    # 尝试 GBK（常见中文编码）
+    try:
+        return content_bytes.decode('gbk')
+    except UnicodeDecodeError:
+        pass
+    # 降级为 latin-1（不会出错，但可能乱码）
+    return content_bytes.decode('latin-1')
+
 # ==================== 小说库功能 ====================
 def get_novel_list():
     """扫描 novels 目录，返回所有 txt 文件的基本信息（使用元数据中的自定义名称）"""
@@ -165,9 +202,21 @@ def get_novel_list():
     return novels
 
 def read_txt_chapters(txt_path):
-    """读取 TXT 文件，按分隔线解析章节，返回章节列表 [(title, content_html), ...]"""
+    """读取 TXT 文件，按分隔线解析章节，若没有分隔线则视为单章"""
     with open(txt_path, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    # 检查是否包含分隔线
+    if '====' not in content:
+        # 无分隔线，整个文件作为一章
+        paragraphs = content.split('\n\n')
+        body_html = ''.join(f'<p>{p}</p>' for p in paragraphs if p.strip())
+        return [{
+            'title': '全文',
+            'content': body_html
+        }]
+
+    # 有分隔线，正常拆分
     chapters_raw = re.split(r'\n={4,}\n', content)
     chapters = []
     for chap in chapters_raw:
@@ -221,7 +270,7 @@ def start_crawl():
         if incremental:
             log_message(task_id, f"增量模式启用，已有章节数: {len(existing_hashes)}")
         else:
-            log_message(task_id, "覆盖模式，将重新下载全部章节")
+            log_message(task_id, "未选择增量模式，将重新下载全部章节")
         try:
             # 调用爬虫，传入已有哈希
             novel_name, txt_path, html_path = run_crawler(
@@ -304,6 +353,66 @@ def delete_novel():
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+
+@app.route('/upload', methods=['POST'])
+def upload_txt():
+    """上传 TXT 文件，大小限制 3MB，自动编码转换，保存到 novels 目录"""
+    if 'file' not in request.files:
+        return jsonify({'error': '未选择文件'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '文件名为空'}), 400
+
+    # 检查扩展名
+    if not file.filename.lower().endswith('.txt'):
+        return jsonify({'error': '只支持 .txt 文件'}), 400
+
+    # 检查文件大小（前端已限制，后端再确认）
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > 3 * 1024 * 1024:
+        return jsonify({'error': '文件大小不能超过 3MB'}), 400
+
+    # 读取二进制内容并转码
+    content_bytes = file.read()
+    content = safe_read_txt(content_bytes)
+
+    # 生成安全的文件名
+    original_name = os.path.splitext(file.filename)[0]
+    safe_name = sanitize_filename(original_name)
+    target_filename = safe_name + '.txt'
+    target_path = os.path.join(OUTPUT_DIR, target_filename)
+
+    # 处理重名
+    final_path = get_unique_filepath(target_path)
+    final_filename = os.path.basename(final_path)
+
+    # 写入文件（UTF-8 编码）
+    with open(final_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    # 获取用户自定义书名（可选参数）
+    custom_name = request.form.get('novel_name', '').strip()
+    if not custom_name:
+        custom_name = original_name
+
+    # 更新元数据
+    meta = read_meta()
+    meta[final_filename] = {
+        'custom_name': custom_name,
+        'chapters': [],          # 上传的 txt 没有章节 URL，留空
+        'last_modified': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'uploaded': True
+    }
+    write_meta(meta)
+
+    return jsonify({
+        'success': True,
+        'filename': final_filename,
+        'name': custom_name
+    })
 
 @app.route('/logs/<task_id>')
 def logs(task_id):
