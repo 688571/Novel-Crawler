@@ -290,13 +290,12 @@
     /* 横屏：控制面板始终展开，紧凑两列布局 */
 @media (max-width: 1024px) and (orientation: landscape) {
     .control-panel {
-        /* 移除圆形折叠样式，恢复为展开状态 */
-        position: fixed !important;          /* 固定位置，避免随页面滚动 */
+        position: fixed !important;
         top: 10px !important;
         right: 10px !important;
         left: auto !important;
         bottom: auto !important;
-        width: 280px !important;              /* 固定宽度，与阅读内容留出间距 */
+        width: 280px !important;
         height: auto !important;
         border-radius: 20px !important;
         padding: 15px !important;
@@ -305,15 +304,14 @@
         box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         overflow: visible !important;
         cursor: default !important;
-        background-image: none !important;    /* 移除圆形背景图标 */
+        background-image: none !important;
         display: grid !important;
-        grid-template-columns: 1fr 1fr;       /* 两列等宽 */
+        grid-template-columns: 1fr 1fr;
         gap: 8px 15px;
         font-size: 13px;
         z-index: 200;
     }
 
-    /* 确保所有内部元素可见 */
     .control-panel h3,
     .control-panel label,
     .control-panel select,
@@ -322,15 +320,13 @@
     .control-panel .btn-primary,
     .control-panel .btn-secondary,
     .control-panel .button-row {
-        display: block !important;            /* 强制显示 */
+        display: block !important;
     }
 
-    /* 隐藏折叠/展开切换按钮（横屏下无用） */
     .control-panel .panel-toggle {
         display: none !important;
     }
 
-    /* 标题跨两列 */
     .control-panel h3 {
         grid-column: 1 / -1;
         margin: 0 0 8px 0;
@@ -339,30 +335,20 @@
         padding-bottom: 5px;
     }
 
-    /* 左列：字体、字号、行间距、亮度 */
-    .control-panel label:nth-of-type(1) { grid-column: 1; } /* 字体 label */
+    .control-panel label:nth-of-type(1) { grid-column: 1; }
     .control-panel select#fontFamily        { grid-column: 1; }
-
-    .control-panel label:nth-of-type(2) { grid-column: 1; } /* 字号 label */
+    .control-panel label:nth-of-type(2) { grid-column: 1; }
     .control-panel input#fontSize           { grid-column: 1; }
-
-    .control-panel label:nth-of-type(3) { grid-column: 1; } /* 行间距 label */
+    .control-panel label:nth-of-type(3) { grid-column: 1; }
     .control-panel input#lineHeight         { grid-column: 1; }
-
-    .control-panel label:nth-of-type(4) { grid-column: 1; } /* 亮度 label */
+    .control-panel label:nth-of-type(4) { grid-column: 1; }
     .control-panel input#brightness         { grid-column: 1; }
-
-    /* 右列：主题、背景色、文字颜色、按钮行 */
-    .control-panel label:nth-of-type(5) { grid-column: 2; } /* 主题 label */
+    .control-panel label:nth-of-type(5) { grid-column: 2; }
     .control-panel .theme-buttons           { grid-column: 2; }
-
-    .control-panel label:nth-of-type(6) { grid-column: 2; } /* 背景色 label */
+    .control-panel label:nth-of-type(6) { grid-column: 2; }
     .control-panel input#bgColor            { grid-column: 2; }
-
-    .control-panel label:nth-of-type(7) { grid-column: 2; } /* 文字颜色 label */
+    .control-panel label:nth-of-type(7) { grid-column: 2; }
     .control-panel input#textColor          { grid-column: 2; }
-
-    /* 按钮行：占据第二列，内部 Flex 同行 */
     .control-panel .button-row {
         grid-column: 2;
         display: flex;
@@ -377,7 +363,6 @@
         padding: 6px 0;
     }
 
-    /* 调整各元素边距，使更紧凑 */
     .control-panel label {
         margin: 3px 0 2px;
         font-size: 12px;
@@ -403,9 +388,8 @@
         float: right;
     }
 
-    /* 深色模式适配 */
     body.dark .control-panel {
-        background-color: #3498db;  /* 保持蓝色背景 */
+        background-color: #3498db;
         background: rgba(40, 40, 45, 0.98) !important;
         border-color: #444;
         color: #eee;
@@ -511,7 +495,7 @@
 
         /* 深色模式适配 */
         body.dark .control-panel {
-            background-color: #3498db;  /* 保持蓝色背景 */
+            background-color: #3498db;
             background: rgba(40,40,45,0.95);
             border-color: rgba(80,80,90,0.5);
             color: #eee;
@@ -564,7 +548,7 @@
             color: white;
             border-color: #2980b9;
         }
-/* 向下翻页按钮（新增） */
+/* 向下翻页按钮 */
 .page-down-btn {
     position: fixed;
     right: 300px;
@@ -572,7 +556,7 @@
     transform: translateY(-50%);
     width: 50px;
     height: 50px;
-    background: #2ecc71;      /* 绿色背景 */
+    background: #2ecc71;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -595,7 +579,7 @@ body.dark .page-down-btn {
 body.dark .page-down-btn:hover {
     background: #2ecc71;
 }
-        /* ========== 自动浏览悬浮按钮（点击循环速度） ========== */
+        /* ========== 自动浏览悬浮按钮 ========== */
         .auto-scroll-btn {
             position: fixed;
             right: 300px;
@@ -660,7 +644,7 @@ body.dark .page-down-btn:hover {
 
 /* 横屏模式下隐藏所有浮动按钮（与原有规则保持一致） */
 @media (max-width: 1024px) and (orientation: landscape) {
-    .control-panel {            /* 新增隐藏 */
+    .control-panel {            
         display: none !important;
     }
 }
@@ -677,7 +661,6 @@ body.dark .page-down-btn:hover {
         body.paper .reader-container { background: #fef7e9; color: #3e2e23; }
 
         /* ---------- 新增：小屏幕（≤1024px）下将三个操作按钮移至右侧并优化排列 ---------- */
-        /* 竖屏：右侧边缘垂直排列 */
         @media (max-width: 1024px) and (orientation: portrait) {
             .convert-float,
             .auto-scroll-btn,
@@ -688,7 +671,7 @@ body.dark .page-down-btn:hover {
                 height: 48px;
                 font-size: 22px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                transform: none; /* 取消原有的translateY */
+                transform: none;
             }
             .convert-float {
                 top: 70px;
@@ -701,7 +684,6 @@ body.dark .page-down-btn:hover {
             }
         }
 
-        /* 横屏：右下角垂直排列，避免覆盖控制面板（控制面板固定在右上） */
         @media (max-width: 1024px) and (orientation: landscape) {
             .convert-float,
             .auto-scroll-btn,
@@ -728,11 +710,8 @@ body.dark .page-down-btn:hover {
     </style>
 </head>
 <body class="light">
-    <!-- 独立简繁转换悬浮按钮 -->
     <div class="convert-float" id="convertFloat" onclick="toggleConvert()">简</div>
-    <!-- 自动浏览悬浮按钮（点击循环速度） -->
     <div class="auto-scroll-btn" id="autoScrollBtn" onclick="cycleAutoSpeed()">▷</div>
-    <!-- 向下翻页按钮（新增） -->
     <div class="page-down-btn" id="pageDownBtn" onclick="pageDown()">↓</div>
     <div class="control-panel" id="controlPanel">
         <div class="panel-toggle" onclick="togglePanel(event)">✕</div>
@@ -776,35 +755,25 @@ body.dark .page-down-btn:hover {
     </div>
 
     <div class="reader-container">
-        <!-- 顶部目录面板 -->
         <div id="top-toc-panel">
             <h3>📑 快速跳转</h3>
-            <div class="top-chapter-list" id="top-chapter-list">
-                <!-- 将由 JavaScript 动态填充 -->
-            </div>
+            <div class="top-chapter-list" id="top-chapter-list"></div>
         </div>
-
-        <!-- 动态章节内容区域 -->
         <div class="reader-content" id="content-frame"></div>
     </div>
 
     <script>
-        // 将后端传递的 chapters 数据转换为 JSON 并嵌入
         var chaptersData = {{ chapters|tojson }};
         var novelName = {{ novel_name|tojson }};
         var currentChapterIndex = 0;
-
         var contentFrame = document.getElementById('content-frame');
         var topChapterList = document.getElementById('top-chapter-list');
         var convertFloat = document.getElementById('convertFloat');
         var autoScrollBtn = document.getElementById('autoScrollBtn');
 
-        // 书签的 localStorage 键名
         var BOOKMARK_KEY = 'bookmark_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
-        // 简繁转换模式键名
         var CONVERT_MODE_KEY = 'convertMode_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
 
-        // 自动浏览相关变量
         var speedLevels = [0, 2, 3, 5, 7, 9];      
         var currentSpeedIndex = 0;                  
         var autoSpeed = speedLevels[currentSpeedIndex]; 
@@ -813,10 +782,38 @@ body.dark .page-down-btn:hover {
         var remainder = 0;                           
         var pixelsPerSecond = 0;                     
 
-        // 记录当前已应用的转换模式
         var appliedConvertMode = null;
 
-        // 保存书签
+        // 核心：将 CRLF 转为 LF，并智能生成 HTML 段落
+        function normalizeChapterContent(raw) {
+            if (!raw || typeof raw !== 'string') return '';
+            // 统一换行符：CRLF → LF
+            let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            // 检测是否已经包含 HTML 块级标签（粗略判断）
+            const hasBlockTags = /<(\/?(p|div|h[1-6]|blockquote|pre|article|section))[^>]*>/i.test(text);
+            if (hasBlockTags) {
+                // 已有 HTML 结构，只将剩余的换行转为 <br>（避免影响已有标签）
+                // 注意：不把标签内的换行符也转换，但简单替换一般问题不大
+                text = text.replace(/\n/g, '<br>');
+                return text;
+            } else {
+                // 纯文本模式：按空行分割段落（支持连续 \n\n 或 \n\n\n）
+                // 先去除首尾空白
+                text = text.trim();
+                // 用两个及以上换行符作为段落分隔符
+                let paragraphs = text.split(/\n\s*\n/);
+                let html = '';
+                for (let para of paragraphs) {
+                    para = para.trim();
+                    if (para === '') continue;
+                    // 将段落内的单个换行转为 <br> 以保持原文换行细节
+                    let inner = para.replace(/\n/g, '<br>');
+                    html += `<p>${inner}</p>`;
+                }
+                return html;
+            }
+        }
+
         function saveBookmark(index) {
             try { localStorage.setItem(BOOKMARK_KEY, index); } catch (e) {}
         }
@@ -830,7 +827,6 @@ body.dark .page-down-btn:hover {
             }
         }
 
-        // 自动滚动当前章节目录项到可视区域
         function scrollCurrentChapterIntoView() {
             var topCurrentLink = document.querySelector('#top-chapter-list a.current');
             if (topCurrentLink) {
@@ -853,26 +849,34 @@ body.dark .page-down-btn:hover {
             }
         }
 
-        // 渲染顶部目录
         function renderTopToc(currentIndex) {
             var html = '<ul>';
             for (var i = 0; i < chaptersData.length; i++) {
                 var chap = chaptersData[i];
                 var currentClass = (i === currentIndex) ? 'current' : '';
                 var displayTitle = (i+1) + '. ' + chap.title;
-                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
+                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + escapeHtml(displayTitle) + '</a></li>';
             }
             html += '</ul>';
             topChapterList.innerHTML = html;
         }
 
-        // ---------- 核心：简繁转换函数 (支持强制转换) ----------
+        function escapeHtml(str) {
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+                return c;
+            });
+        }
+
         function convertText(mode, save = true, force = false) {
             if (typeof OpenCC === 'undefined') {
                 alert('简繁转换库加载失败，请刷新页面重试。');
                 return;
             }
-            // 如果不是强制模式，且模式与已应用模式相同，则跳过
             if (!force && appliedConvertMode === mode) return;
 
             const converter = OpenCC.Converter({
@@ -906,34 +910,28 @@ body.dark .page-down-btn:hover {
             }
         }
 
-        // 强制应用存储的偏好模式 (默认简体)
         function forceApplyStoredMode() {
             let storedMode = null;
             try {
                 storedMode = localStorage.getItem(CONVERT_MODE_KEY);
             } catch(e) {}
-            // 默认模式为简体转换 (t2s: 繁体->简体)
             let targetMode = 't2s';
             if (storedMode && (storedMode === 's2t' || storedMode === 't2s')) {
                 targetMode = storedMode;
             } else {
-                // 无存储则写入默认简体模式
                 try {
                     localStorage.setItem(CONVERT_MODE_KEY, 't2s');
                 } catch(e) {}
             }
-            // 强制转换，忽略当前 appliedConvertMode
             convertText(targetMode, false, true);
         }
 
-        // 切换简繁 (点击悬浮按钮)
         window.toggleConvert = function() {
             var currentText = convertFloat.textContent;
             var targetMode = currentText === '简' ? 's2t' : 't2s';
             convertText(targetMode, true, false);
         };
 
-        // 初始化按钮显示及默认模式
         function initConvertButton() {
             let savedMode = null;
             try {
@@ -949,24 +947,24 @@ body.dark .page-down-btn:hover {
             convertFloat.textContent = savedMode === 's2t' ? '繁' : '简';
         }
 
-        // 渲染当前章节
         function renderChapter(index) {
             var chapter = chaptersData[index];
             if (!chapter) return;
 
             var title = chapter.title;
-            var contentHtml = chapter.content;
+            var rawContent = chapter.content;
+            // 核心优化：对章节内容进行规范化处理（CRLF→LF，生成段落）
+            var processedContent = normalizeChapterContent(rawContent);
 
             var html = '<section id="chap' + (index+1) + '">';
-            html += '<h2>' + title + '</h2>';
-            html += contentHtml;
+            html += '<h2>' + escapeHtml(title) + '</h2>';
+            html += processedContent;
             html += '<div class="nav-links">';
             html += '<a ' + (index > 0 ? 'onclick="goToChapter(' + (index-1) + ')"' : 'class="disabled"') + '>上一章</a>';
             html += '<a onclick="goToToc()">目录</a>';
             html += '<a ' + (index < chaptersData.length-1 ? 'onclick="goToChapter(' + (index+1) + ')"' : 'class="disabled"') + '>下一章</a>';
             html += '</div>';
 
-            // 底部章节目录
             html += '<div class="chapter-directory">';
             html += '<h3>📑 目录 (共 ' + chaptersData.length + ' 章)</h3>';
             html += '<div class="chapter-list"><ul>';
@@ -974,7 +972,7 @@ body.dark .page-down-btn:hover {
                 var chap = chaptersData[i];
                 var currentClass = (i === index) ? 'current' : '';
                 var displayTitle = (i+1) + '. ' + chap.title;
-                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + displayTitle + '</a></li>';
+                html += '<li><a class="' + currentClass + '" onclick="goToChapter(' + i + ')">' + escapeHtml(displayTitle) + '</a></li>';
             }
             html += '</ul></div></div></section>';
 
@@ -986,7 +984,6 @@ body.dark .page-down-btn:hover {
             window.location.hash = 'chap' + (index+1);
             saveBookmark(index);
 
-            // 关键修复：每次渲染新章节后，强制应用用户偏好的简繁模式（默认简体）
             forceApplyStoredMode();
 
             setTimeout(scrollCurrentChapterIntoView, 50);
@@ -1005,7 +1002,6 @@ body.dark .page-down-btn:hover {
             if (directory) directory.scrollIntoView({ behavior: 'smooth' });
         }
 
-        // 初始化章节
         function initFromHashOrBookmark() {
             var hash = window.location.hash;
             var targetIndex = null;
@@ -1018,7 +1014,6 @@ body.dark .page-down-btn:hover {
             renderChapter(targetIndex);
         }
 
-        // ---------- 自动浏览功能 ----------
         function startAutoScroll() {
             if (autoSpeed === 0) return;
             if (rafId) return;
@@ -1083,7 +1078,14 @@ body.dark .page-down-btn:hover {
             }
         };
 
-        // ---------- 阅读设置部分 (保持不变，功能完好) ----------
+        window.pageDown = function() {
+            window.scrollBy({
+                top: window.innerHeight,
+                behavior: 'smooth'
+            });
+        };
+
+        // 阅读设置部分（保持不变，功能完好）
         (function() {
             const controlPanel = document.getElementById('controlPanel');
             const readerContainer = document.querySelector('.reader-container');
@@ -1252,17 +1254,7 @@ body.dark .page-down-btn:hover {
             }
         })();
 
-        // 向下翻页功能
-        window.pageDown = function() {
-            window.scrollBy({
-                top: window.innerHeight,
-                behavior: 'smooth'
-            });
-        };
-
-        // 初始化转换按钮状态及默认模式
         initConvertButton();
-        // 启动阅读器
         initFromHashOrBookmark();
     </script>
 </body>
