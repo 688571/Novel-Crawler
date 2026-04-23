@@ -1,6 +1,6 @@
 # Novel Crawler & Reader 小说爬虫与阅读系统
-这是一个基于 Flask 的轻量级网络小说爬虫 + 本地在线阅读系统。 只需提供小说目录页或任意章节页的 URL，系统即可自动抓取整本小说，保存为 .txt 文件，并生成 HTML 阅读版本。 内置小说库管理，支持重命名、删除和在线阅读。
-实现增量下载，更新于 2026.3.25
+这是一个基于 Flask 的轻量级网络小说爬虫 + 本地在线阅读系统。 只需提供小说目录页或任意章节页的 URL，系统即可自动抓取整本小说，保存为 .txt 文件，并生成 HTML 阅读版本。 内置小说库管理，支持重命名、删除和在线阅读。支持更多网站，自行挖掘。如有新增网站支持需要，可以让AI分析crawler.py和webapp.py，打开公开网站F12选择合适内容分析。
+实现增量下载，更新于 2026.4.24
 Implement incremental download.Updated in 3.25 2026
 [**English**](#english) | [**中文**](#中文)
 
@@ -12,7 +12,7 @@ Implement incremental download.Updated in 3.25 2026
 # Novel Crawler & Online Reading System
 
 This is a lightweight web novel crawler + local online reading system based on Flask.  
-Simply provide the URL of a novel's **table of contents page** or **any chapter page**, and the system will automatically crawl the entire novel, save it as a `.txt` file, and generate an HTML version for reading.  
+Simply provide the URL of a novel's **table of contents page** or **any chapter page**, and the system will automatically crawl the entire novel, save it as a `.txt` file, and generate an HTML version for reading.  Support more websites, explore on your own. If you need to add support for new websites, let the AI analyze crawler.py and webapp.py, open the public website, press F12, and select the appropriate content for analysis.
 It includes a built-in library manager, supporting renaming, deletion, and online reading.
 
 ---
