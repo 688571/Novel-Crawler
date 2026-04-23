@@ -30,16 +30,18 @@ HEADERS_TEMPLATE = {
     'Upgrade-Insecure-Requests': '1',
 }
 
-# 通用选择器配置
+# 通用选择器配置（兼容多种网站结构）
 COMMON_TITLE_SELECTORS = [
     'h1', 'h2', '.title', '#chapter-title', '.chapter-title',
-    '.article-title', '.post-title', '#nr_title'
+    '.article-title', '.post-title', '#nr_title',
+    'div.catalog h1'  # kanunu8 专用
 ]
 
 COMMON_CONTENT_SELECTORS = [
     '#TextContent', '#content', '.content', '#nr1',
     '.article-content', '#chapter-content', '.chapter-content',
-    '#booktext', '.book-content', '#chapter-body'
+    '#booktext', '.book-content', '#chapter-body',
+    'div#neirong'  # kanunu8 专用
 ]
 
 COMMON_NEXT_PAGE_PATTERNS = {
@@ -54,49 +56,95 @@ COMMON_NEXT_CHAPTER_PATTERNS = {
     'id': ['next_url', 'next_chapter', 'nextchapter']
 }
 
-# 目录页解析选择器（可根据常见网站调整）
-DIRECTORY_TITLE_SELECTOR = 'h1'  # 小说名所在标签
-DIRECTORY_AUTHOR_SELECTOR = '.book-describe p a'  # 作者链接，取文本
-DIRECTORY_CHAPTER_LIST_SELECTOR = '.book-list ul li a'  # 章节链接列表
-
 def get_url_hash(url):
     """返回URL的MD5哈希值，作为章节唯一标识"""
     return hashlib.md5(url.encode('utf-8')).hexdigest()
 
-def fetch_html(session, url, max_retries=5, base_delay=2, log_callback=None):
-    """获取HTML，带重试机制"""
+def fetch_html(session, url, max_retries=5, base_delay=2, log_callback=None, force_encoding=None):
+    """
+    获取HTML，带重试机制，智能检测编码，可强制指定编码
+    :param session: requests.Session 对象
+    :param url: 目标URL
+    :param max_retries: 最大重试次数
+    :param base_delay: 基础延迟（指数退避）
+    :param log_callback: 日志回调函数
+    :param force_encoding: 强制使用的编码（如 'gb18030'）
+    :return: HTML字符串，失败返回None
+    """
     for attempt in range(1, max_retries + 1):
         headers = HEADERS_TEMPLATE.copy()
         headers['User-Agent'] = random.choice(USER_AGENTS)
 
         try:
             resp = session.get(url, headers=headers, timeout=15)
-            resp.encoding = 'utf-8'
+            
+            # 1. 如果强制指定了编码，直接使用
+            if force_encoding:
+                resp.encoding = force_encoding
+            else:
+                # 2. 优先从 Content-Type 头中提取 charset
+                content_type = resp.headers.get('Content-Type', '')
+                if 'charset=' in content_type:
+                    charset = content_type.split('charset=')[-1].strip().lower()
+                    # 将常见中文编码统一映射为 gb18030（最全的中文编码）
+                    if charset in ('gbk', 'gb2312', 'gb18030', 'big5'):
+                        resp.encoding = 'gb18030'
+                    else:
+                        resp.encoding = charset if charset else 'utf-8'
+                else:
+                    # 3. 使用 requests 自带的 apparent_encoding（依赖 chardet 或内置）
+                    if resp.apparent_encoding:
+                        enc = resp.apparent_encoding.lower()
+                        if enc in ('gbk', 'gb2312', 'gb18030', 'big5'):
+                            resp.encoding = 'gb18030'
+                        else:
+                            resp.encoding = enc
+                    else:
+                        # 4. 尝试使用 chardet 检测内容（如果可用）
+                        try:
+                            import chardet
+                            detected = chardet.detect(resp.content)
+                            enc = detected.get('encoding', 'utf-8').lower()
+                            if enc in ('gbk', 'gb2312', 'gb18030', 'big5'):
+                                enc = 'gb18030'
+                            resp.encoding = enc
+                        except ImportError:
+                            # 5. 降级：默认 utf-8，同时通过简单字节模式判断是否可能是 GBK 编码
+                            resp.encoding = 'utf-8'
+                            # 检测常见 GBK 字节模式（如 "是" 的 GBK 编码为 0xca 0xc7）
+                            if b'\xca\xc7' in resp.content or b'\xb5\xc4' in resp.content:
+                                resp.encoding = 'gb18030'
+            
             if resp.status_code == 200:
                 return resp.text
             else:
                 msg = f"请求失败，状态码：{resp.status_code} URL：{url} (尝试 {attempt}/{max_retries})"
                 print(msg)
-                if log_callback: log_callback(msg)
+                if log_callback:
+                    log_callback(msg)
         except requests.exceptions.Timeout:
             msg = f"请求超时：{url} (尝试 {attempt}/{max_retries})"
             print(msg)
-            if log_callback: log_callback(msg)
+            if log_callback:
+                log_callback(msg)
         except Exception as e:
             msg = f"请求异常：{e} URL：{url} (尝试 {attempt}/{max_retries})"
             print(msg)
-            if log_callback: log_callback(msg)
+            if log_callback:
+                log_callback(msg)
 
         if attempt < max_retries:
             wait = base_delay * (2 ** (attempt - 1)) + random.uniform(0, 1)
             msg = f"等待 {wait:.2f} 秒后重试..."
             print(msg)
-            if log_callback: log_callback(msg)
+            if log_callback:
+                log_callback(msg)
             time.sleep(wait)
 
     msg = f"无法获取页面，已达最大重试次数 {max_retries}，URL：{url}"
     print(msg)
-    if log_callback: log_callback(msg)
+    if log_callback:
+        log_callback(msg)
     return None
 
 def extract_novel_name_from_title(html):
@@ -166,10 +214,8 @@ def _find_link_by_patterns(soup, current_url, patterns):
         if href.startswith('javascript:'):
             continue
         text = a.get_text().strip()
-        # 如果文本匹配关键词，直接返回
         if any(key in text for key in patterns.get('text', [])):
             return urljoin(current_url, href)
-        # 如果无文本，也返回（假设是目标链接）
         if not text:
             return urljoin(current_url, href)
 
@@ -316,42 +362,85 @@ def generate_html_from_txt(txt_path, novel_name):
     return html_path
 
 def is_directory_page(soup):
-    """判断是否为目录页（包含章节列表）"""
+    """判断是否为目录页（包含章节列表），支持 kanunu8 结构"""
+    # 原有检测
     if soup.select_one('.book-list ul li a'):
         return True
     if soup.select_one('#list a'):
         return True
     if soup.select_one('.chapter-list a'):
         return True
+    
+    # kanunu8 目录页特征检测
+    if soup.select_one('div.catalog'):  # 目录页主要容器
+        if soup.select_one('div.mulu-list ul li a'):
+            return True
+    
+    # 检测 mulu-title + mulu-list 组合
+    if soup.select_one('div.mulu-title') and soup.select_one('div.mulu-list'):
+        return True
+    
     return False
 
-def parse_novel_info_from_directory(soup, base_url):
-    """从目录页解析小说名和作者"""
-    info = {'name': '未知小说', 'author': '未知作者'}
-    # 提取小说名
-    title_elem = soup.select_one('h1')
+def extract_novel_name_from_directory(soup):
+    """从 kanunu8 目录页提取小说名"""
+    title_elem = soup.select_one('div.catalog h1')
     if title_elem:
-        info['name'] = title_elem.get_text().strip()
-    else:
-        title_tag = soup.find('title')
-        if title_tag:
-            title_text = title_tag.get_text().strip()
-            parts = re.split(r'[_\-|]', title_text)
-            info['name'] = max(parts, key=len).strip() if len(parts) >= 2 else parts[0].strip()
+        return title_elem.get_text().strip()
+    return None
 
-    # 提取作者
-    author_elem = soup.select_one('.book-describe p a')
+def extract_author_from_directory(soup):
+    """从 kanunu8 目录页提取作者"""
+    author_elem = soup.select_one('div.catalog div.info')
     if author_elem:
-        info['author'] = author_elem.get_text().strip()
+        text = author_elem.get_text().strip()
+        if '作者：' in text:
+            return text.replace('作者：', '').strip()
+        return text
+    return '未知作者'
+
+def parse_novel_info_from_directory(soup, base_url):
+    """从目录页解析小说名和作者，支持 kanunu8 结构"""
+    info = {'name': '未知小说', 'author': '未知作者'}
+    
+    # 优先使用 kanunu8 专用提取器
+    novel_name = extract_novel_name_from_directory(soup)
+    if novel_name:
+        info['name'] = novel_name
+    
+    # 如果专用提取器失败，回退到原有逻辑
+    if info['name'] == '未知小说':
+        title_elem = soup.select_one('h1')
+        if title_elem:
+            info['name'] = title_elem.get_text().strip()
+        else:
+            title_tag = soup.find('title')
+            if title_tag:
+                title_text = title_tag.get_text().strip()
+                parts = re.split(r'[_\-|]', title_text)
+                info['name'] = max(parts, key=len).strip() if len(parts) >= 2 else parts[0].strip()
+    
+    # 提取作者
+    author = extract_author_from_directory(soup)
+    if author and author != '未知作者':
+        info['author'] = author
     else:
-        author_elem = soup.find('a', href=re.compile(r'/author/'))
+        # 回退到原有逻辑
+        author_elem = soup.select_one('.book-describe p a')
         if author_elem:
             info['author'] = author_elem.get_text().strip()
+        else:
+            author_elem = soup.find('a', href=re.compile(r'/author/'))
+            if author_elem:
+                info['author'] = author_elem.get_text().strip()
+    
     return info
 
 def extract_chapter_links_from_directory(soup, base_url):
-    """从目录页提取所有章节链接（绝对URL）"""
+    """从目录页提取所有章节链接（绝对URL），支持 kanunu8 多层级章节列表"""
     links = []
+    
+    # 原有选择器（保留兼容性）
     for selector in ['.book-list ul li a', '#list a', '.chapter-list a']:
         for a in soup.select(selector):
             href = a.get('href')
@@ -360,7 +449,17 @@ def extract_chapter_links_from_directory(soup, base_url):
                 if full_url not in links:
                     links.append(full_url)
         if links:
-            break
+            return links
+    
+    # kanunu8 专用：遍历所有 mulu-list 中的章节链接
+    for mulu_list in soup.select('div.mulu-list'):
+        for a in mulu_list.select('ul li a'):
+            href = a.get('href')
+            if href and not href.startswith('#') and not href.startswith('javascript:'):
+                full_url = urljoin(base_url, href)
+                if full_url not in links:
+                    links.append(full_url)
+    
     return links
 
 def fetch_single_chapter(session, chapter_url, log_callback=None):
@@ -428,19 +527,31 @@ def fetch_single_chapter(session, chapter_url, log_callback=None):
         return None, None
 
 def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
-                existing_chapter_hashes=None, update_meta_callback=None):
+                existing_chapter_hashes=None, update_meta_callback=None, proxy=None):
     """
     主爬虫函数，自动检测起始页面类型
     :param start_url: 起始 URL（目录页或章节页）
     :param output_dir: 输出目录
     :param log_callback: 日志回调函数
-    :param override_name: 手动指定的小说名（若提供则覆盖自动提取，并强制所有章节标题为该名称）
-    :param existing_chapter_hashes: 已下载章节的URL哈希集合（用于增量下载）
-    :param update_meta_callback: 回调函数，每成功下载一章调用，参数为章节URL的哈希值
+    :param override_name: 手动指定的小说名
+    :param existing_chapter_hashes: 已下载章节的URL哈希集合
+    :param update_meta_callback: 回调函数，每成功下载一章调用
+    :param proxy: 代理地址，例如 'http://127.0.0.1:8080'
     """
     session = requests.Session()
     session.verify = False
-
+    
+    # 配置代理
+    if proxy:
+        session.proxies = {
+            'http': proxy,
+            'https': proxy
+        }
+        msg = f"使用代理：{proxy}"
+        print(msg)
+        if log_callback:
+            log_callback(msg)
+    
     os.makedirs(output_dir, exist_ok=True)
 
     # 获取起始页面
@@ -503,10 +614,14 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
         safe_name = sanitize_filename(novel_name)
         txt_path = os.path.join(output_dir, safe_name + ".txt")
         if os.path.exists(txt_path):
-            os.remove(txt_path)
+            # 增量模式下不清空文件，但保留原内容
+            if not existing_chapter_hashes:
+                os.remove(txt_path)
 
-        header = f"小说名称：{novel_name}\n作者：{author}\n"
-        save_to_txt([], txt_path, mode='w', header=header)
+        # 仅在文件不存在或全量抓取时写入头部
+        if not os.path.exists(txt_path):
+            header = f"小说名称：{novel_name}\n作者：{author}\n"
+            save_to_txt([], txt_path, mode='w', header=header)
 
         # 遍历每个章节链接
         for idx, chap_url in enumerate(chapter_links, 1):
@@ -522,7 +637,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
                 msg = f"第 {idx} 章保存成功"
                 print(msg)
                 if log_callback: log_callback(msg)
-                # 通知上层更新元数据
                 if update_meta_callback:
                     update_meta_callback(get_url_hash(chap_url))
             else:
@@ -564,18 +678,16 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
 
         safe_name = sanitize_filename(novel_name)
         txt_path = os.path.join(output_dir, safe_name + ".txt")
-        if os.path.exists(txt_path):
+        if os.path.exists(txt_path) and not existing_chapter_hashes:
             os.remove(txt_path)
 
         # 定位到第一个未下载的章节
         current_url = start_url
         visited_urls = set()
-        # 如果提供了已有哈希，则跳过已存在的章节
         while existing_chapter_hashes and current_url and get_url_hash(current_url) in existing_chapter_hashes:
             msg = f"章节 {current_url} 已存在，尝试跳转到下一章"
             print(msg)
             if log_callback: log_callback(msg)
-            # 获取当前页面的下一章链接
             html = fetch_html(session, current_url, log_callback=log_callback)
             if not html:
                 break
@@ -599,12 +711,10 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
 
         chapter_count = 0
         while current_url:
-            # 再次确认当前章节未下载（安全）
             if existing_chapter_hashes and get_url_hash(current_url) in existing_chapter_hashes:
                 msg = f"章节 {current_url} 已存在，跳过"
                 print(msg)
                 if log_callback: log_callback(msg)
-                # 查找下一章
                 html = fetch_html(session, current_url, log_callback=log_callback)
                 if html:
                     soup = BeautifulSoup(html, 'html.parser')
@@ -623,7 +733,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
             print(msg)
             if log_callback: log_callback(msg)
 
-            # 抓取本章（含分页）
             title, content = fetch_single_chapter(session, current_url, log_callback)
             if title and content:
                 if override_name:
@@ -632,7 +741,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
                 msg = f"第 {chapter_count} 章保存成功"
                 print(msg)
                 if log_callback: log_callback(msg)
-                # 通知上层更新元数据
                 if update_meta_callback:
                     update_meta_callback(get_url_hash(current_url))
             else:
@@ -641,9 +749,6 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
                 if log_callback: log_callback(msg)
                 break
 
-            # 查找下一章链接
-            # 获取最后一页的 soup（fetch_single_chapter 未返回，故重新请求当前起始页）
-            # 注意：有可能分页后下一章链接只在最后一页，但大多数网站同时也在起始页有，这里简单处理
             html = fetch_html(session, current_url, log_callback=log_callback)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
@@ -679,3 +784,118 @@ def run_crawler(start_url, output_dir, log_callback=None, override_name=None,
         if log_callback: log_callback(msg)
 
         return novel_name, txt_path, html_path
+# ==================== 作者页处理函数 ====================
+def parse_author_page(author_url, log_callback=None):
+    """
+    解析作者页，返回作者名和作品列表（每个作品包含标题和目录页URL）
+    支持多种作者页结构：
+      - 旧版：div.mulu-list ul li a
+      - 新版：table 中的作品链接（如咬枝绿页面）
+    并且自动排除顶部/底部导航链接
+    """
+    session = requests.Session()
+    session.verify = False
+    html = fetch_html(session, author_url, log_callback=log_callback, force_encoding='gb18030')
+    if not html:
+        raise Exception("无法获取作者页")
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # 提取作者名
+    author_name_elem = soup.select_one('div.zuojia h1')
+    author_name = author_name_elem.get_text().strip() if author_name_elem else "未知作者"
+
+    # 定义需要排除的链接文本关键词（支持部分匹配）
+    EXCLUDE_KEYWORDS = [
+        '努努书坊', '国内作家', '港台海外', '外国', '传统言情', '青春校园', '都市', '历史军事',
+        '古代文学', '网络原创', '穿越言情', '玄幻奇幻', '科幻', '更多图书分类', '武侠小说', '影视',
+        '灵异', '修真', '侦探推理', '官场', '传记纪实', '鬼故事', '盗墓', '游戏', '职场', '商战',
+        '吸血鬼', '诺贝尔', '韩流', '专题', '短篇小说', '首页', '返回', '顶部', '意见反馈',
+        '全部分类', '作品目录', '作者资料', '内容简介', '分享到', '收藏', '打印', '评论', '登录', '注册'
+    ]
+
+    def is_excluded_link(link_text, parent_elem):
+        """判断链接是否应被排除"""
+        # 文本中包含排除词
+        if any(keyword in link_text for keyword in EXCLUDE_KEYWORDS):
+            return True
+        # 父级或祖先存在导航特征
+        nav_parents = parent_elem.find_parents(['div', 'ul', 'table'], class_=re.compile(r'(nav|menu|header|footer|top|bottom|sidebar)', re.I))
+        if nav_parents:
+            return True
+        # 链接父级 class/id 包含导航关键词
+        if parent_elem.get('class'):
+            for cls in parent_elem['class']:
+                if re.search(r'(nav|menu|header|footer|top|bottom)', cls, re.I):
+                    return True
+        if parent_elem.get('id'):
+            if re.search(r'(nav|menu|header|footer|top|bottom)', parent_elem['id'], re.I):
+                return True
+        return False
+
+    works = []
+    
+    # 1. 尝试原有选择器（适用于明开夜合等）
+    mulu_links = soup.select('div.mulu-list ul li a')
+    if mulu_links:
+        for a in mulu_links:
+            title = a.get_text().strip()
+            href = a.get('href')
+            if href and title and not is_excluded_link(title, a):
+                full_url = urljoin(author_url, href)
+                works.append({'title': title, 'url': full_url})
+        if works:
+            return author_name, works
+
+    # 2. 通用链接提取：遍历所有 a 标签
+    all_links = soup.find_all('a', href=True)
+    for a in all_links:
+        href = a['href'].strip()
+        text = a.get_text().strip()
+        if href.startswith('javascript:') or href == '#':
+            continue
+        if not text or len(text) < 2:
+            continue
+        if is_excluded_link(text, a):
+            continue
+        # 链接必须指向相对路径且路径包含数字/字母组合（典型的小说目录页）
+        if '/' in href and not href.startswith('http'):
+            full_url = urljoin(author_url, href)
+            if not any(w['url'] == full_url for w in works):
+                works.append({'title': text, 'url': full_url})
+
+    # 3. 如果还没有，从表格中再次提取（兜底）
+    if not works:
+        tables = soup.find_all('table')
+        for table in tables:
+            # 排除可能包含导航的表格（通过父级或自身class）
+            if is_excluded_link('', table):
+                continue
+            for a in table.find_all('a', href=True):
+                href = a['href']
+                text = a.get_text().strip()
+                if href.startswith('javascript:') or href == '#':
+                    continue
+                if not text or len(text) < 2:
+                    continue
+                if is_excluded_link(text, a):
+                    continue
+                full_url = urljoin(author_url, href)
+                if not any(w['url'] == full_url for w in works):
+                    works.append({'title': text, 'url': full_url})
+
+    # 去重
+    unique_works = []
+    seen_urls = set()
+    for w in works:
+        if w['url'] not in seen_urls:
+            seen_urls.add(w['url'])
+            unique_works.append(w)
+    works = unique_works
+
+    if not works:
+        raise Exception("未找到任何作品链接，请检查作者页结构是否匹配。")
+
+    if log_callback:
+        log_callback(f"共解析到 {len(works)} 部作品，已排除导航链接")
+
+    return author_name, works
