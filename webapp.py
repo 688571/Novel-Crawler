@@ -1,8 +1,10 @@
+# webapp.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
 import time
+import requests
 import threading
 import json
 import fcntl
@@ -10,30 +12,20 @@ import tempfile
 import hashlib
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
-
-# ==================== 导入爬虫模块 ====================
-from crawler import run_crawler
-
+from crawler import run_crawler, generate_html_from_txt, parse_author_page
 # ==================== 基础配置 ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'))
-# 限制上传文件最大为 3MB
-app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024
 print("模板文件夹路径:", app.template_folder)
 
 OUTPUT_DIR = os.path.join(BASE_DIR, 'novels')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 TASKS_FILE = os.path.join(BASE_DIR, 'tasks.json')
-TASKS_LOCK_FILE = TASKS_FILE + '.lock'   # 锁文件
+TASKS_LOCK_FILE = TASKS_FILE + '.lock'
 META_FILE = os.path.join(BASE_DIR, 'library_meta.json')
-META_LOCK_FILE = META_FILE + '.lock'     # 锁文件
-
-# ==================== 错误处理 ====================
-@app.errorhandler(413)
-def too_large(e):
-    return jsonify({'error': '文件大小超过 3MB 限制'}), 413
+META_LOCK_FILE = META_FILE + '.lock'
 
 # ==================== 任务存储（文件版，原子写入+锁）====================
 def read_tasks():
@@ -136,34 +128,6 @@ def sanitize_filename(name):
     """清理文件名中的非法字符"""
     return re.sub(r'[\\/*?:"<>|\s]', '_', name)
 
-# ==================== 上传辅助函数 ====================
-def get_unique_filepath(filepath):
-    """如果文件已存在，自动添加序号 (1), (2)..."""
-    if not os.path.exists(filepath):
-        return filepath
-    base, ext = os.path.splitext(filepath)
-    counter = 1
-    while True:
-        new_path = f"{base} ({counter}){ext}"
-        if not os.path.exists(new_path):
-            return new_path
-        counter += 1
-
-def safe_read_txt(content_bytes):
-    """尝试多种编码，返回统一 UTF-8 字符串"""
-    # 优先尝试 UTF-8
-    try:
-        return content_bytes.decode('utf-8')
-    except UnicodeDecodeError:
-        pass
-    # 尝试 GBK（常见中文编码）
-    try:
-        return content_bytes.decode('gbk')
-    except UnicodeDecodeError:
-        pass
-    # 降级为 latin-1（不会出错，但可能乱码）
-    return content_bytes.decode('latin-1')
-
 # ==================== 小说库功能 ====================
 def get_novel_list():
     """扫描 novels 目录，返回所有 txt 文件的基本信息（使用元数据中的自定义名称）"""
@@ -171,7 +135,7 @@ def get_novel_list():
     if not os.path.exists(OUTPUT_DIR):
         return novels
 
-    meta = read_meta()   # 加载元数据
+    meta = read_meta()
 
     for filename in os.listdir(OUTPUT_DIR):
         if filename.endswith('.txt'):
@@ -202,21 +166,9 @@ def get_novel_list():
     return novels
 
 def read_txt_chapters(txt_path):
-    """读取 TXT 文件，按分隔线解析章节，若没有分隔线则视为单章"""
+    """读取 TXT 文件，按分隔线解析章节，返回章节列表 [(title, content_html), ...]"""
     with open(txt_path, 'r', encoding='utf-8') as f:
         content = f.read()
-
-    # 检查是否包含分隔线
-    if '====' not in content:
-        # 无分隔线，整个文件作为一章
-        paragraphs = content.split('\n\n')
-        body_html = ''.join(f'<p>{p}</p>' for p in paragraphs if p.strip())
-        return [{
-            'title': '全文',
-            'content': body_html
-        }]
-
-    # 有分隔线，正常拆分
     chapters_raw = re.split(r'\n={4,}\n', content)
     chapters = []
     for chap in chapters_raw:
@@ -237,11 +189,10 @@ def index():
 
 @app.route('/start', methods=['POST'])
 def start_crawl():
-    """启动爬虫（后台线程）"""
     start_url = request.form.get('url')
     novel_name_input = request.form.get('novel_name', '').strip()
-    # 增量模式：默认为增量，前端可加参数；这里先设定为增量，也可以从表单获取
     incremental = request.form.get('incremental', 'true').lower() == 'true'
+    proxy_url = request.form.get('proxy_url', '').strip()   # 新增：代理地址
 
     if not start_url:
         return jsonify({'error': 'URL不能为空'}), 400
@@ -253,7 +204,8 @@ def start_crawl():
         'start_url': start_url,
         'novel_name': None,
         'safe_name': None,
-        'html_path': None
+        'html_path': None,
+        'proxy_used': proxy_url or None   # 记录使用的代理（可选）
     }
     save_task(task_id, task)
 
@@ -263,8 +215,11 @@ def start_crawl():
         safe_name = sanitize_filename(novel_name_input)
         existing_hashes = get_existing_chapter_hashes(safe_name + ".txt")
 
-    def task_worker(task_id, start_url, novel_name_input, existing_hashes, incremental):
+    # 修改 task_worker 参数，增加 proxy_url
+    def task_worker(task_id, start_url, novel_name_input, existing_hashes, incremental, proxy_url):
         log_message(task_id, f"任务 {task_id} 启动，起始URL: {start_url}")
+        if proxy_url:
+            log_message(task_id, f"使用代理：{proxy_url}")
         if novel_name_input:
             log_message(task_id, f"用户指定小说名: {novel_name_input}")
         if incremental:
@@ -272,16 +227,19 @@ def start_crawl():
         else:
             log_message(task_id, "未选择增量模式，将重新下载全部章节")
         try:
-            # 调用爬虫，传入已有哈希
+            # 调用爬虫，传入代理地址
             novel_name, txt_path, html_path = run_crawler(
                 start_url=start_url,
                 output_dir=OUTPUT_DIR,
                 log_callback=lambda msg: log_message(task_id, msg),
                 override_name=novel_name_input if novel_name_input else None,
-                existing_chapter_hashes=existing_hashes if incremental else None
-                # 如果 incremental 为 False，传 None 表示重新下载全部
+                existing_chapter_hashes=existing_hashes if incremental else None,
+                proxy=proxy_url if proxy_url else None   # 新增参数
             )
-            safe_name = os.path.splitext(os.path.basename(html_path))[0]
+            if html_path:
+                safe_name = os.path.splitext(os.path.basename(html_path))[0]
+            else:
+                safe_name = sanitize_filename(novel_name) if novel_name else "unknown"
             task = get_task(task_id)
             task['status'] = 'finished'
             task['novel_name'] = novel_name
@@ -297,7 +255,8 @@ def start_crawl():
             task['status'] = 'error'
             save_task(task_id, task)
 
-    thread = threading.Thread(target=task_worker, args=(task_id, start_url, novel_name_input, existing_hashes, incremental))
+    # 启动线程时传入 proxy_url
+    thread = threading.Thread(target=task_worker, args=(task_id, start_url, novel_name_input, existing_hashes, incremental, proxy_url))
     thread.daemon = True
     thread.start()
     return redirect(url_for('logs', task_id=task_id))
@@ -330,7 +289,7 @@ def rename_novel():
 
 @app.route('/delete', methods=['POST'])
 def delete_novel():
-    """删除小说文件及其元数据"""
+    """删除小说文件及其元数据，并删除同名 HTML"""
     data = request.get_json()
     filename = data.get('filename')
 
@@ -346,74 +305,94 @@ def delete_novel():
 
     try:
         os.remove(filepath)
+
+        # 删除同名 HTML 文件
+        base = os.path.splitext(filename)[0]
+        html_path = os.path.join(OUTPUT_DIR, base + '.html')
+        if os.path.exists(html_path):
+            os.remove(html_path)
+
+        # 删除元数据
         meta = read_meta()
         if filename in meta:
             del meta[filename]
             write_meta(meta)
+
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+        
+from werkzeug.utils import secure_filename
+
+# 允许上传的文件扩展名
+ALLOWED_EXTENSIONS = {'txt'}
+MAX_CONTENT_LENGTH = 3 * 1024 * 1024  # 3MB
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/upload', methods=['POST'])
-def upload_txt():
-    """上传 TXT 文件，大小限制 3MB，自动编码转换，保存到 novels 目录"""
+def upload_novel():
+    """上传 TXT 小说文件，自动生成 HTML 并加入书架"""
     if 'file' not in request.files:
-        return jsonify({'error': '未选择文件'}), 400
+        return jsonify({'success': False, 'error': '未找到文件'}), 400
 
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'error': '文件名为空'}), 400
+        return jsonify({'success': False, 'error': '文件名为空'}), 400
 
-    # 检查扩展名
-    if not file.filename.lower().endswith('.txt'):
-        return jsonify({'error': '只支持 .txt 文件'}), 400
+    if not allowed_file(file.filename):
+        return jsonify({'success': False, 'error': '仅支持 .txt 文件'}), 400
 
-    # 检查文件大小（前端已限制，后端再确认）
-    file.seek(0, 2)
+    # 文件大小检查（Flask 默认限制，此处额外检查）
+    file.seek(0, os.SEEK_END)
     size = file.tell()
     file.seek(0)
-    if size > 3 * 1024 * 1024:
-        return jsonify({'error': '文件大小不能超过 3MB'}), 400
+    if size > MAX_CONTENT_LENGTH:
+        return jsonify({'success': False, 'error': '文件大小超过 3MB'}), 400
 
-    # 读取二进制内容并转码
-    content_bytes = file.read()
-    content = safe_read_txt(content_bytes)
-
-    # 生成安全的文件名
-    original_name = os.path.splitext(file.filename)[0]
-    safe_name = sanitize_filename(original_name)
-    target_filename = safe_name + '.txt'
-    target_path = os.path.join(OUTPUT_DIR, target_filename)
-
-    # 处理重名
-    final_path = get_unique_filepath(target_path)
-    final_filename = os.path.basename(final_path)
-
-    # 写入文件（UTF-8 编码）
-    with open(final_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-    # 获取用户自定义书名（可选参数）
+    # 获取自定义书名（如果提供）
     custom_name = request.form.get('novel_name', '').strip()
-    if not custom_name:
-        custom_name = original_name
+    original_basename = os.path.splitext(file.filename)[0]
 
-    # 更新元数据
+    if custom_name:
+        # 使用用户输入的书名作为显示名和文件名
+        safe_basename = sanitize_filename(custom_name)
+        display_name = custom_name
+    else:
+        safe_basename = sanitize_filename(original_basename)
+        display_name = original_basename
+
+    txt_filename = safe_basename + '.txt'
+    txt_path = os.path.join(OUTPUT_DIR, txt_filename)
+
+    # 如果文件已存在，可以选择覆盖（这里直接覆盖，并更新元数据）
+    # 也可以返回错误，根据需求调整
+    try:
+        file.save(txt_path)
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'保存文件失败：{str(e)}'}), 500
+
+    # 生成对应的 HTML 阅读文件
+    try:
+        html_path = generate_html_from_txt(txt_path, display_name)
+    except Exception as e:
+        # 如果生成 HTML 失败，不影响小说入库，但记录日志
+        print(f"生成 HTML 失败：{e}")
+        html_path = None
+
+    # 更新元数据（记录自定义名称和章节哈希，可选）
     meta = read_meta()
-    meta[final_filename] = {
-        'custom_name': custom_name,
-        'chapters': [],          # 上传的 txt 没有章节 URL，留空
-        'last_modified': time.strftime('%Y-%m-%d %H:%M:%S'),
-        'uploaded': True
-    }
+    if txt_filename not in meta:
+        meta[txt_filename] = {}
+    meta[txt_filename]['custom_name'] = display_name
+    meta[txt_filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    # 可选：解析章节哈希（简单处理，先留空，实际可调用解析函数）
+    meta[txt_filename]['chapters'] = meta[txt_filename].get('chapters', [])
     write_meta(meta)
 
-    return jsonify({
-        'success': True,
-        'filename': final_filename,
-        'name': custom_name
-    })
-
+    return jsonify({'success': True, 'name': display_name, 'filename': txt_filename})
+    
 @app.route('/logs/<task_id>')
 def logs(task_id):
     """显示任务日志页面"""
@@ -470,6 +449,125 @@ def reader(novel_name):
         return render_template('reader.html', novel_name=novel_name, html_content=html_content)
     else:
         return redirect(url_for('read_novel', filename=novel_name + '.txt'))
+# 在 webapp.py 中新增以下路由（放在其他路由附近）
+
+@app.route('/api/test_proxy', methods=['POST'])
+def test_proxy():
+    data = request.get_json()
+    proxy_url = data.get('proxy_url', '').strip()
+    if not proxy_url:
+        return jsonify({'success': False, 'message': '代理地址不能为空'})
+
+    proxies = {'http': proxy_url, 'https': proxy_url}
+    try:
+        start_time = time.time()
+        # 改用 HTTP 协议测试（避免 SSL 错误）
+        resp = requests.get('http://www.baidu.com', proxies=proxies, timeout=10, verify=False)
+        elapsed = (time.time() - start_time) * 1000
+        if resp.status_code == 200:
+            return jsonify({'success': True, 'message': f'连通成功，响应时间 {elapsed:.0f} ms'})
+        else:
+            return jsonify({'success': False, 'message': f'代理返回异常状态码：{resp.status_code}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'代理测试失败：{str(e)}'})
+        
+@app.route('/author')
+def author_form():
+    """作者页输入表单"""
+    return render_template('author_form.html')
+
+@app.route('/author/parse', methods=['POST'])
+def author_parse():
+    """解析作者页，返回作品列表供用户勾选"""
+    author_url = request.form.get('author_url', '').strip()
+    if not author_url:
+        return jsonify({'error': '作者页URL不能为空'}), 400
+
+    try:
+        author_name, works = parse_author_page(author_url, log_callback=lambda msg: print(msg))
+    except Exception as e:
+        return render_template('author_select.html', error=str(e), author_url=author_url)
+
+    # 将作品列表和作者名存储到 session 或临时传递，这里直接渲染页面
+    return render_template('author_select.html', author_name=author_name, works=works, author_url=author_url)
+
+@app.route('/batch_start', methods=['POST'])
+def batch_start():
+    """批量下载用户勾选的作品"""
+    selected_urls = request.form.getlist('selected_urls')
+    if not selected_urls:
+        return jsonify({'error': '请至少选择一部作品'}), 400
+
+    # 可选：获取代理设置（可从表单传递或全局配置）
+    proxy_url = request.form.get('proxy_url', '').strip()
+
+    task_id = str(int(time.time()))
+    task = {
+        'status': 'running',
+        'log': [],
+        'type': 'batch',
+        'total': len(selected_urls),
+        'completed': 0,
+        'results': [],
+        'proxy_used': proxy_url or None
+    }
+    save_task(task_id, task)
+
+    def batch_worker():
+        log_message(task_id, f"批量下载任务启动，共 {len(selected_urls)} 部作品")
+        if proxy_url:
+            log_message(task_id, f"使用代理：{proxy_url}")
+
+        for idx, url in enumerate(selected_urls, 1):
+            log_message(task_id, f"开始下载第 {idx}/{len(selected_urls)} 部：{url}")
+            try:
+                # 调用单本下载函数（注意 run_crawler 会创建独立文件）
+                novel_name, txt_path, html_path = run_crawler(
+                    start_url=url,
+                    output_dir=OUTPUT_DIR,
+                    log_callback=lambda msg: log_message(task_id, f"  {msg}"),
+                    override_name=None,
+                    existing_chapter_hashes=None,  # 批量模式默认全量下载
+                    update_meta_callback=None,
+                    proxy=proxy_url if proxy_url else None
+                )
+                task_data = get_task(task_id)
+                task_data['results'].append({
+                    'url': url,
+                    'novel_name': novel_name,
+                    'txt_path': txt_path,
+                    'html_path': html_path,
+                    'status': 'success'
+                })
+                task_data['completed'] = idx
+                save_task(task_id, task_data)
+                log_message(task_id, f"第 {idx} 部完成：{novel_name}")
+            except Exception as e:
+                import traceback
+                error_msg = f"第 {idx} 部下载失败：{str(e)}\n{traceback.format_exc()}"
+                log_message(task_id, error_msg)
+                task_data = get_task(task_id)
+                task_data['results'].append({
+                    'url': url,
+                    'error': str(e),
+                    'status': 'error'
+                })
+                task_data['completed'] = idx
+                save_task(task_id, task_data)
+            # 作品之间休息 3 秒
+            if idx < len(selected_urls):
+                time.sleep(3)
+
+        # 任务结束
+        final_task = get_task(task_id)
+        final_task['status'] = 'finished'
+        save_task(task_id, final_task)
+        log_message(task_id, "批量下载任务全部完成")
+
+    thread = threading.Thread(target=batch_worker)
+    thread.daemon = True
+    thread.start()
+    return redirect(url_for('logs', task_id=task_id))
 
 @app.route('/console')
 def console():
