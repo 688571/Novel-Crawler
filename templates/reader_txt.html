@@ -286,115 +286,114 @@
             }
         }
 
+        /* 横屏：控制面板始终展开，紧凑两列布局 */
+        @media (max-width: 1024px) and (orientation: landscape) {
+            .control-panel {
+                position: fixed !important;
+                top: 10px !important;
+                right: 10px !important;
+                left: auto !important;
+                bottom: auto !important;
+                width: 280px !important;
+                height: auto !important;
+                border-radius: 20px !important;
+                padding: 15px !important;
+                background: rgba(255, 255, 255, 0.95) !important;
+                backdrop-filter: blur(12px);
+                box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+                overflow: visible !important;
+                cursor: default !important;
+                background-image: none !important;
+                display: grid !important;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px 15px;
+                font-size: 13px;
+                z-index: 200;
+            }
 
-    /* 横屏：控制面板始终展开，紧凑两列布局 */
-@media (max-width: 1024px) and (orientation: landscape) {
-    .control-panel {
-        position: fixed !important;
-        top: 10px !important;
-        right: 10px !important;
-        left: auto !important;
-        bottom: auto !important;
-        width: 280px !important;
-        height: auto !important;
-        border-radius: 20px !important;
-        padding: 15px !important;
-        background: rgba(255, 255, 255, 0.95) !important;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        overflow: visible !important;
-        cursor: default !important;
-        background-image: none !important;
-        display: grid !important;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px 15px;
-        font-size: 13px;
-        z-index: 200;
-    }
+            .control-panel h3,
+            .control-panel label,
+            .control-panel select,
+            .control-panel input,
+            .control-panel .theme-buttons,
+            .control-panel .btn-primary,
+            .control-panel .btn-secondary,
+            .control-panel .button-row {
+                display: block !important;
+            }
 
-    .control-panel h3,
-    .control-panel label,
-    .control-panel select,
-    .control-panel input,
-    .control-panel .theme-buttons,
-    .control-panel .btn-primary,
-    .control-panel .btn-secondary,
-    .control-panel .button-row {
-        display: block !important;
-    }
+            .control-panel .panel-toggle {
+                display: none !important;
+            }
 
-    .control-panel .panel-toggle {
-        display: none !important;
-    }
+            .control-panel h3 {
+                grid-column: 1 / -1;
+                margin: 0 0 8px 0;
+                font-size: 16px;
+                border-bottom: 1px solid rgba(0,0,0,0.1);
+                padding-bottom: 5px;
+            }
 
-    .control-panel h3 {
-        grid-column: 1 / -1;
-        margin: 0 0 8px 0;
-        font-size: 16px;
-        border-bottom: 1px solid rgba(0,0,0,0.1);
-        padding-bottom: 5px;
-    }
+            .control-panel label:nth-of-type(1) { grid-column: 1; }
+            .control-panel select#fontFamily        { grid-column: 1; }
+            .control-panel label:nth-of-type(2) { grid-column: 1; }
+            .control-panel input#fontSize           { grid-column: 1; }
+            .control-panel label:nth-of-type(3) { grid-column: 1; }
+            .control-panel input#lineHeight         { grid-column: 1; }
+            .control-panel label:nth-of-type(4) { grid-column: 1; }
+            .control-panel input#brightness         { grid-column: 1; }
+            .control-panel label:nth-of-type(5) { grid-column: 2; }
+            .control-panel .theme-buttons           { grid-column: 2; }
+            .control-panel label:nth-of-type(6) { grid-column: 2; }
+            .control-panel input#bgColor            { grid-column: 2; }
+            .control-panel label:nth-of-type(7) { grid-column: 2; }
+            .control-panel input#textColor          { grid-column: 2; }
+            .control-panel .button-row {
+                grid-column: 2;
+                display: flex;
+                gap: 8px;
+                margin-top: 5px;
+            }
+            .control-panel .button-row .btn-primary,
+            .control-panel .button-row .btn-secondary {
+                flex: 1;
+                margin: 0;
+                font-size: 13px;
+                padding: 6px 0;
+            }
 
-    .control-panel label:nth-of-type(1) { grid-column: 1; }
-    .control-panel select#fontFamily        { grid-column: 1; }
-    .control-panel label:nth-of-type(2) { grid-column: 1; }
-    .control-panel input#fontSize           { grid-column: 1; }
-    .control-panel label:nth-of-type(3) { grid-column: 1; }
-    .control-panel input#lineHeight         { grid-column: 1; }
-    .control-panel label:nth-of-type(4) { grid-column: 1; }
-    .control-panel input#brightness         { grid-column: 1; }
-    .control-panel label:nth-of-type(5) { grid-column: 2; }
-    .control-panel .theme-buttons           { grid-column: 2; }
-    .control-panel label:nth-of-type(6) { grid-column: 2; }
-    .control-panel input#bgColor            { grid-column: 2; }
-    .control-panel label:nth-of-type(7) { grid-column: 2; }
-    .control-panel input#textColor          { grid-column: 2; }
-    .control-panel .button-row {
-        grid-column: 2;
-        display: flex;
-        gap: 8px;
-        margin-top: 5px;
-    }
-    .control-panel .button-row .btn-primary,
-    .control-panel .button-row .btn-secondary {
-        flex: 1;
-        margin: 0;
-        font-size: 13px;
-        padding: 6px 0;
-    }
+            .control-panel label {
+                margin: 3px 0 2px;
+                font-size: 12px;
+            }
+            .control-panel select,
+            .control-panel input[type="range"],
+            .control-panel input[type="color"] {
+                margin: 0 0 5px;
+                padding: 4px;
+                font-size: 12px;
+                width: 100%;
+            }
+            .control-panel .theme-buttons {
+                margin: 0 0 5px;
+                gap: 4px;
+            }
+            .control-panel .theme-btn {
+                font-size: 12px;
+                padding: 5px 0;
+            }
+            .control-panel .value-display {
+                font-size: 11px;
+                float: right;
+            }
 
-    .control-panel label {
-        margin: 3px 0 2px;
-        font-size: 12px;
-    }
-    .control-panel select,
-    .control-panel input[type="range"],
-    .control-panel input[type="color"] {
-        margin: 0 0 5px;
-        padding: 4px;
-        font-size: 12px;
-        width: 100%;
-    }
-    .control-panel .theme-buttons {
-        margin: 0 0 5px;
-        gap: 4px;
-    }
-    .control-panel .theme-btn {
-        font-size: 12px;
-        padding: 5px 0;
-    }
-    .control-panel .value-display {
-        font-size: 11px;
-        float: right;
-    }
-
-    body.dark .control-panel {
-        background-color: #3498db;
-        background: rgba(40, 40, 45, 0.98) !important;
-        border-color: #444;
-        color: #eee;
-    }
-}
+            body.dark .control-panel {
+                background-color: #3498db;
+                background: rgba(40, 40, 45, 0.98) !important;
+                border-color: #444;
+                color: #eee;
+            }
+        }
 
         .control-panel h3 {
             font-size: 18px;
@@ -548,37 +547,117 @@
             color: white;
             border-color: #2980b9;
         }
-/* 向下翻页按钮 */
-.page-down-btn {
-    position: fixed;
-    right: 300px;
-    bottom: 100px; 
-    transform: translateY(-50%);
-    width: 50px;
-    height: 50px;
-    background: #2ecc71;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    transition: background 0.2s;
-    border: none;
-    z-index: 300;
-}
-.page-down-btn:hover {
-    background: #27ae60;
-}
-body.dark .page-down-btn {
-    background: #27ae60;
-}
-body.dark .page-down-btn:hover {
-    background: #2ecc71;
-}
+
+        /* 向下翻页按钮 */
+        .page-down-btn {
+            position: fixed;
+            right: 300px;
+            bottom: 100px; 
+            transform: translateY(-50%);
+            width: 50px;
+            height: 50px;
+            background: #2ecc71;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            transition: background 0.2s;
+            border: none;
+            z-index: 300;
+        }
+        .page-down-btn:hover {
+            background: #27ae60;
+        }
+        body.dark .page-down-btn {
+            background: #27ae60;
+        }
+        body.dark .page-down-btn:hover {
+            background: #2ecc71;
+        }
+
+ /* 向下翻页按钮 */
+        .page-down-btn2 {
+            position: fixed;
+            left: 100px;
+            bottom: 100px; 
+            transform: translateY(-50%);
+            width: 50px;
+            height: 50px;
+            background: #2ecc71;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            transition: background 0.2s;
+            border: none;
+            z-index: 300;
+        }
+        .page-down-btn2:hover {
+            background: #27ae60;
+        }
+        body.dark .page-down-btn2 {
+            background: #27ae60;
+        }
+        body.dark .page-down-btn2:hover {
+            background: #2ecc71;
+        }
+        /* ========== 左右箭头章节切换容器（新增） ========== */
+        .chapter-switch-container {
+            position: fixed;
+            right: 300px;
+            bottom: 180px;
+            display: flex;
+            gap: 12px;
+            z-index: 300;
+        }
+        .chapter-arrow {
+            width: 50px;
+            height: 50px;
+            background: #3498db;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            border: none;
+            user-select: none;
+        }
+        .chapter-arrow:hover {
+            background: #2980b9;
+            transform: scale(1.02);
+        }
+        .chapter-arrow.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+            background: #6c757d;
+            transform: none;
+        }
+        body.dark .chapter-arrow {
+            background: #1f6f9f;
+        }
+        body.dark .chapter-arrow:hover {
+            background: #2980b9;
+        }
+        body.dark .chapter-arrow.disabled {
+            background: #495057;
+        }
+
         /* ========== 自动浏览悬浮按钮 ========== */
         .auto-scroll-btn {
             position: fixed;
@@ -642,12 +721,6 @@ body.dark .page-down-btn:hover {
             background: #9b59b6;
         }
 
-/* 横屏模式下隐藏所有浮动按钮（与原有规则保持一致） */
-@media (max-width: 1024px) and (orientation: landscape) {
-    .control-panel {            
-        display: none !important;
-    }
-}
         /* 主题样式 */
         body.light { background-color: #f5f5f5; color: #333; }
         body.light .reader-container { background: white; }
@@ -660,59 +733,85 @@ body.dark .page-down-btn:hover {
         body.paper { background-color: #e8dcc0; color: #3e2e23; }
         body.paper .reader-container { background: #fef7e9; color: #3e2e23; }
 
-        /* ---------- 新增：小屏幕（≤1024px）下将三个操作按钮移至右侧并优化排列 ---------- */
+        /* ---------- 新增：小屏幕（≤1024px）下调整浮动按钮位置 ---------- */
         @media (max-width: 1024px) and (orientation: portrait) {
+            .control-panel,
             .convert-float,
             .auto-scroll-btn,
-            .page-down-btn {
+            .page-down-btn,
+            .page-down-btn2,
+            .chapter-switch-container {
                 right: 10px;
                 left: auto;
-                width: 48px;
-                height: 48px;
-                font-size: 22px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                transform: none;
+            }
+            .control-panel {            
+                left: 50px;
             }
             .convert-float {
-                top: 70px;
+                display: none !important;
             }
             .auto-scroll-btn {
-                top: 130px;
+                display: none !important;
+            }
+            .chapter-switch-container {
+                right: 70px;
+                bottom: 24px;
             }
             .page-down-btn {
-                bottom: 30px;
+                bottom: 5px;
+            }
+            .page-down-btn2 {
+                left: 10px;
+                bottom: 5px;
+            }
+            .chapter-arrow {
+                width: 48px;
+                height: 48px;
+                font-size: 26px;
             }
         }
 
-        @media (max-width: 1024px) and (orientation: landscape) {
-            .convert-float,
-            .auto-scroll-btn,
-            .page-down-btn {
-                right: 20px;
-                left: auto;
-                top: auto;
-                width: 44px;
-                height: 44px;
-                font-size: 20px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                transform: none;
-            }
-            .convert-float {
-                top: 40px;
+@media (max-width: 1024px) and (orientation: landscape) {
+    .control-panel {            
+        display: none !important;
+    }
+     .convert-float {
+                display: none !important;
             }
             .auto-scroll-btn {
-                top: 100px;
+                display: none !important;
+            }
+            .chapter-switch-container {
+                right:10px;
+                bottom: 80px;
             }
             .page-down-btn {
-                bottom: 30px;
+                right:40px;
+                bottom: 0px;
             }
+            .page-down-btn2 {
+                left:10px;
+                bottom: 0px;
+            }
+            .chapter-arrow {
+                width: 48px;
+                height: 48px;
+                font-size: 26px;
+            }
+}
         }
     </style>
 </head>
 <body class="light">
     <div class="convert-float" id="convertFloat" onclick="toggleConvert()">简</div>
     <div class="auto-scroll-btn" id="autoScrollBtn" onclick="cycleAutoSpeed()">▷</div>
+    <!-- 新增左右箭头章节切换容器 -->
+    <div class="chapter-switch-container" id="chapterSwitchContainer">
+        <div class="chapter-arrow" id="prevChapterArrow" onclick="handlePrevChapter()">←</div>
+        <div class="chapter-arrow" id="nextChapterArrow" onclick="handleNextChapter()">→</div>
+    </div>
     <div class="page-down-btn" id="pageDownBtn" onclick="pageDown()">↓</div>
+    <div class="page-down-btn2" id="pageDownBtn" onclick="pageDown()">↓</div>
     <div class="control-panel" id="controlPanel">
         <div class="panel-toggle" onclick="togglePanel(event)">✕</div>
         <h3>📖 阅读设置</h3>
@@ -748,10 +847,10 @@ body.dark .page-down-btn:hover {
         <label>文字颜色</label>
         <input type="color" id="textColor" value="#333333" onchange="setCustomColor(this.value)">
 
-<div class="button-row" style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
-    <button class="btn-primary" onclick="saveSettings()">💾 保存</button>
-    <button class="btn-secondary" onclick="window.location.href='{{ url_for('library') }}'">📚 书库</button>
-</div>
+        <div class="button-row" style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+            <button class="btn-primary" onclick="saveSettings()">💾 保存</button>
+            <button class="btn-secondary" onclick="window.location.href='{{ url_for('library') }}'">📚 书库</button>
+        </div>
     </div>
 
     <div class="reader-container">
@@ -770,6 +869,8 @@ body.dark .page-down-btn:hover {
         var topChapterList = document.getElementById('top-chapter-list');
         var convertFloat = document.getElementById('convertFloat');
         var autoScrollBtn = document.getElementById('autoScrollBtn');
+        var prevArrow = document.getElementById('prevChapterArrow');
+        var nextArrow = document.getElementById('nextChapterArrow');
 
         var BOOKMARK_KEY = 'bookmark_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
         var CONVERT_MODE_KEY = 'convertMode_' + novelName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -784,29 +885,48 @@ body.dark .page-down-btn:hover {
 
         var appliedConvertMode = null;
 
-        // 核心：将 CRLF 转为 LF，并智能生成 HTML 段落
+        // 更新左右箭头启用/禁用状态
+        function updateArrowButtonsState() {
+            if (!prevArrow || !nextArrow) return;
+            if (currentChapterIndex <= 0) {
+                prevArrow.classList.add('disabled');
+            } else {
+                prevArrow.classList.remove('disabled');
+            }
+            if (currentChapterIndex >= chaptersData.length - 1) {
+                nextArrow.classList.add('disabled');
+            } else {
+                nextArrow.classList.remove('disabled');
+            }
+        }
+
+        // 处理上一章
+        window.handlePrevChapter = function() {
+            if (currentChapterIndex > 0) {
+                goToChapter(currentChapterIndex - 1);
+            }
+        };
+        // 处理下一章
+        window.handleNextChapter = function() {
+            if (currentChapterIndex < chaptersData.length - 1) {
+                goToChapter(currentChapterIndex + 1);
+            }
+        };
+
         function normalizeChapterContent(raw) {
             if (!raw || typeof raw !== 'string') return '';
-            // 统一换行符：CRLF → LF
             let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            // 检测是否已经包含 HTML 块级标签（粗略判断）
             const hasBlockTags = /<(\/?(p|div|h[1-6]|blockquote|pre|article|section))[^>]*>/i.test(text);
             if (hasBlockTags) {
-                // 已有 HTML 结构，只将剩余的换行转为 <br>（避免影响已有标签）
-                // 注意：不把标签内的换行符也转换，但简单替换一般问题不大
                 text = text.replace(/\n/g, '<br>');
                 return text;
             } else {
-                // 纯文本模式：按空行分割段落（支持连续 \n\n 或 \n\n\n）
-                // 先去除首尾空白
                 text = text.trim();
-                // 用两个及以上换行符作为段落分隔符
                 let paragraphs = text.split(/\n\s*\n/);
                 let html = '';
                 for (let para of paragraphs) {
                     para = para.trim();
                     if (para === '') continue;
-                    // 将段落内的单个换行转为 <br> 以保持原文换行细节
                     let inner = para.replace(/\n/g, '<br>');
                     html += `<p>${inner}</p>`;
                 }
@@ -953,7 +1073,6 @@ body.dark .page-down-btn:hover {
 
             var title = chapter.title;
             var rawContent = chapter.content;
-            // 核心优化：对章节内容进行规范化处理（CRLF→LF，生成段落）
             var processedContent = normalizeChapterContent(rawContent);
 
             var html = '<section id="chap' + (index+1) + '">';
@@ -985,7 +1104,7 @@ body.dark .page-down-btn:hover {
             saveBookmark(index);
 
             forceApplyStoredMode();
-
+            updateArrowButtonsState(); // 更新左右箭头状态
             setTimeout(scrollCurrentChapterIntoView, 50);
         }
 
@@ -1085,7 +1204,7 @@ body.dark .page-down-btn:hover {
             });
         };
 
-        // 阅读设置部分（保持不变，功能完好）
+        // 阅读设置部分（保持不变）
         (function() {
             const controlPanel = document.getElementById('controlPanel');
             const readerContainer = document.querySelector('.reader-container');
@@ -1241,12 +1360,14 @@ body.dark .page-down-btn:hover {
                     controlPanel.classList.add('expanded');
                 }
             });
-            document.querySelector('.panel-toggle').addEventListener('click', function(e) {
-                if (window.innerWidth <= 1024) {
-                    controlPanel.classList.remove('expanded');
-                    e.stopPropagation();
-                }
-            });
+            if(document.querySelector('.panel-toggle')) {
+                document.querySelector('.panel-toggle').addEventListener('click', function(e) {
+                    if (window.innerWidth <= 1024) {
+                        controlPanel.classList.remove('expanded');
+                        e.stopPropagation();
+                    }
+                });
+            }
 
             loadSettings();
             if (!localStorage.getItem('novelReaderSettings')) {
@@ -1256,6 +1377,7 @@ body.dark .page-down-btn:hover {
 
         initConvertButton();
         initFromHashOrBookmark();
+        updateArrowButtonsState();
     </script>
 </body>
 </html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>选择要下载的作品</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 25px 30px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        h1 { margin-top: 0; color: #1e2a3e; }
+        .author-info { background: #eef2ff; padding: 12px 16px; border-radius: 14px; margin-bottom: 20px; }
+        .work-list { margin: 20px 0; }
+        .work-item { padding: 8px 0; border-bottom: 1px solid #e9edf2; display: flex; align-items: center; }
+        .work-item input { margin-right: 12px; transform: scale(1.1); }
+        .work-item label { flex: 1; cursor: pointer; font-size: 1rem; }
+        .actions { margin-top: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        button {
+            background: #2c6e9e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #1f5a87; transform: translateY(-1px); }
+        .select-all { background: #f0f2f5; border: 1px solid #ccc; color: #333; }
+        .error { color: #e74c3c; background: #fdecea; padding: 12px; border-radius: 12px; margin-bottom: 20px; }
+        .proxy-input { margin: 15px 0; }
+        .proxy-input input { width: 100%; padding: 10px; border-radius: 30px; border: 1px solid #cfdee9; }
+        hr { margin: 20px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📖 选择要下载的作品</h1>
+    {% if error %}
+        <div class="error">❌ 解析失败：{{ error }}</div>
+        <a href="/author">返回重试</a>
+    {% else %}
+        <div class="author-info">
+            <strong>👤 作者：</strong> {{ author_name }}<br>
+            <strong>📚 作品总数：</strong> {{ works|length }}
+        </div>
+
+        <form action="/batch_start" method="post" id="batchForm">
+            <div class="work-list">
+                {% for work in works %}
+                <div class="work-item">
+                    <input type="checkbox" name="selected_urls" value="{{ work.url }}" id="work_{{ loop.index }}">
+                    <label for="work_{{ loop.index }}">{{ work.title }}</label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="proxy-input">
+                <label>🔌 代理地址（可选）</label>
+                <input type="text" name="proxy_url" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080">
+            </div>
+
+            <div class="actions">
+                <button type="button" class="select-all" id="selectAllBtn">✅ 全选</button>
+                <button type="button" class="select-all" id="deselectAllBtn">❌ 取消全选</button>
+                <button type="submit" style="background: #27ae60;">🚀 开始下载勾选的作品</button>
+            </div>
+        </form>
+    {% endif %}
+</div>
+
+<script>
+    document.getElementById('selectAllBtn')?.addEventListener('click', function() {
+        document.querySelectorAll('input[name="selected_urls"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('deselectAllBtn')?.addEventListener('click', function() {
+        document.querySelectorAll('input[name="selected_urls"]').forEach(cb => cb.checked = false);
+    });
+</script>
+</body>
+</html>

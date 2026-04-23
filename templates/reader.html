@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+    <meta name="language" content="zh-CN">
+    <meta http-equiv="Content-Language" content="zh-CN">
     <title>{{ novel_name }} - 阅读器</title>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.min.js"></script>
     <style>
         /* ========== 全局变量与重置 ========== */
         * {
@@ -13,7 +16,8 @@
         }
 
         body {
-            font-family: 'Microsoft YaHei', sans-serif;
+            /* 优化简体中文显示：优先使用简体中文字体，涵盖 Windows/macOS/iOS/Android 平台 */
+            font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Micro Hei", "苹方-简", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
             background-color: #f8f9fa;
             color: #333;
             line-height: 1.8;
@@ -37,7 +41,10 @@
         .reader-content {
             padding: 40px 50px;
             font-size: 16px;
+            line-height: 1.8;
             transition: font-size 0.2s, line-height 0.2s;
+            /* 继承简体中文字体栈，保证正文阅读舒适 */
+            font-family: inherit;
         }
 
         /* 手机端缩小内边距 */
@@ -48,18 +55,20 @@
             }
         }
 
-        /* 针对小说生成HTML的样式覆盖 */
+        /* 针对小说生成HTML的样式覆盖，保持简体中文排版美观 */
         .reader-content h1, .reader-content h2 {
             font-weight: 500;
             margin: 1.5em 0 0.8em;
             color: inherit;
             border-left: 5px solid currentColor;
             padding-left: 20px;
+            font-family: inherit;
         }
         .reader-content p {
             margin: 1em 0;
             text-indent: 2em;
             word-break: break-word;
+            font-family: inherit;
         }
         .reader-content .nav-links {
             display: flex;
@@ -78,6 +87,7 @@
             font-size: 14px;
             min-width: 80px;
             text-align: center;
+            font-family: inherit;
         }
         .reader-content .nav-links a:hover {
             background: #3498db;
@@ -100,9 +110,10 @@
             transition: all 0.3s;
             z-index: 100;
             font-size: 14px;
+            font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
         }
 
-        /* 手机端控制面板：改为可折叠的浮动按钮 */
+        /* 手机端控制面板：改为可折叠的浮动按钮，简体说明 */
         @media (max-width: 800px) {
             .control-panel {
                 position: fixed;
@@ -126,7 +137,7 @@
                 height: auto;
                 border-radius: 20px;
                 padding: 15px;
-                background: rgba(255,255,255,0.95);
+                background: rgba(255,255,255,0.98);
                 right: 5%;
                 left: 5%;
                 bottom: 20px;
@@ -141,7 +152,7 @@
                 display: none;
             }
             .control-panel .panel-toggle {
-                display: none; /* 不需要额外的按钮，点击整个面板切换 */
+                display: none;
             }
             .control-panel.expanded .panel-toggle {
                 display: block;
@@ -151,6 +162,10 @@
                 font-size: 20px;
                 cursor: pointer;
                 color: #666;
+                background: transparent;
+                width: 28px;
+                text-align: center;
+                line-height: 1;
             }
         }
 
@@ -179,6 +194,7 @@
             border-radius: 20px;
             border: 1px solid #ddd;
             background: white;
+            font-family: inherit;
         }
 
         .control-panel input[type="color"] {
@@ -205,6 +221,7 @@
             color: #333;
             transition: all 0.2s;
             border: 1px solid transparent;
+            font-family: inherit;
         }
 
         .theme-btn:hover {
@@ -222,7 +239,7 @@
             color: #666;
         }
 
-        /* 深色模式适配 */
+        /* 深色模式适配，同时保证简体字体优先 */
         body.dark .control-panel {
             background: rgba(40,40,45,0.95);
             border-color: rgba(80,80,90,0.5);
@@ -245,11 +262,13 @@
             overflow-x: auto;
             white-space: nowrap;
             -webkit-overflow-scrolling: touch;
+            font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
         }
         #toc-panel h3 {
             margin-bottom: 10px;
             display: inline-block;
             white-space: nowrap;
+            font-weight: 500;
         }
         #toc-panel ul {
             list-style: none;
@@ -271,13 +290,15 @@
             text-decoration: none;
             font-size: 14px;
             white-space: nowrap;
+            font-family: inherit;
+            transition: 0.2s;
         }
         #toc-panel a:hover {
             background: #2c3e50;
             color: white;
         }
 
-        /* 主题样式 */
+        /* 主题样式 - 同时保留简体中文阅读舒适度 */
         body.light { background-color: #f5f5f5; color: #333; }
         body.light .reader-container { background: white; }
         body.dark { background-color: #1e1e1e; color: #d4d4d4; }
@@ -288,19 +309,26 @@
         body.sepia .reader-container { background: #fbf0d9; color: #5b4636; }
         body.paper { background-color: #e8dcc0; color: #3e2e23; }
         body.paper .reader-container { background: #fef7e9; color: #3e2e23; }
+
+        /* 增强阅读区滚动平滑 */
+        html {
+            scroll-behavior: smooth;
+        }
     </style>
 </head>
 <body class="light">
     <div class="control-panel" id="controlPanel">
         <div class="panel-toggle" onclick="togglePanel(event)">✕</div>
         <h3>📖 阅读设置</h3>
-        <label>字体 <span class="value-display" id="fontFamilyValue">微软雅黑</span></label>
+        <label>字体 <span class="value-display" id="fontFamilyValue">系统默认(简体)</span></label>
         <select id="fontFamily">
-            <option value="'Microsoft YaHei', sans-serif" selected>微软雅黑</option>
+            <option value="'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif" selected>系统推荐(简体优化)</option>
+            <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
             <option value="'SimSun', '宋体', serif">宋体</option>
             <option value="'SimHei', '黑体', sans-serif">黑体</option>
             <option value="'KaiTi', '楷体', serif">楷体</option>
             <option value="'FangSong', '仿宋', serif">仿宋</option>
+            <option value="'PingFang SC', 'Hiragino Sans GB', system-ui">苹方(苹果优化)</option>
         </select>
 
         <label>字号 <span class="value-display" id="fontSizeValue">16px</span></label>
@@ -311,10 +339,10 @@
 
         <label>主题</label>
         <div class="theme-buttons">
-            <button class="theme-btn active" onclick="setTheme('light')">亮色</button>
-            <button class="theme-btn" onclick="setTheme('dark')">深色</button>
-            <button class="theme-btn" onclick="setTheme('sepia')">护眼</button>
-            <button class="theme-btn" onclick="setTheme('paper')">纸色</button>
+            <button class="theme-btn active" onclick="setTheme('light', this)">亮色</button>
+            <button class="theme-btn" onclick="setTheme('dark', this)">深色</button>
+            <button class="theme-btn" onclick="setTheme('sepia', this)">护眼</button>
+            <button class="theme-btn" onclick="setTheme('paper', this)">纸色</button>
         </div>
 
         <label>背景色</label>
@@ -324,7 +352,7 @@
         <input type="color" id="textColor" value="#333333" onchange="setCustomColor(this.value)">
 
         <div style="margin-top: 15px; text-align: center;">
-            <button onclick="resetToTheme()" style="background: none; border: 1px solid #aaa; border-radius: 20px; padding: 5px 15px; cursor: pointer; width: 100%;">重置为当前主题</button>
+            <button onclick="resetToTheme()" style="background: none; border: 1px solid #aaa; border-radius: 20px; padding: 5px 15px; cursor: pointer; width: 100%; font-family: inherit;">重置为当前主题</button>
         </div>
     </div>
 
@@ -354,7 +382,7 @@
     </div>
 
     <script>
-        // 控制面板折叠/展开功能（手机端）
+        // ========== 控制面板折叠/展开（移动端优化）==========
         const controlPanel = document.getElementById('controlPanel');
         function togglePanel(e) {
             e.stopPropagation();
@@ -364,17 +392,21 @@
         controlPanel.addEventListener('click', function(e) {
             if (window.innerWidth <= 800 && !controlPanel.classList.contains('expanded')) {
                 controlPanel.classList.add('expanded');
-            }
-        });
-        // 点击关闭按钮收起
-        document.querySelector('.panel-toggle').addEventListener('click', function(e) {
-            if (window.innerWidth <= 800) {
-                controlPanel.classList.remove('expanded');
                 e.stopPropagation();
             }
         });
+        // 关闭按钮收起
+        const closeBtn = document.querySelector('.panel-toggle');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function(e) {
+                if (window.innerWidth <= 800) {
+                    controlPanel.classList.remove('expanded');
+                    e.stopPropagation();
+                }
+            });
+        }
 
-        // 原有阅读设置功能保持不变
+        // ========== 阅读设置核心逻辑（简体中文优化，默认简体字体优先）==========
         const contentFrame = document.getElementById('content-frame');
         const fontSizeSlider = document.getElementById('fontSize');
         const fontSizeSpan = document.getElementById('fontSizeValue');
@@ -385,56 +417,87 @@
         const bgColorPicker = document.getElementById('bgColor');
         const textColorPicker = document.getElementById('textColor');
 
+        // 初始化显示值
         fontSizeSpan.textContent = fontSizeSlider.value + 'px';
         lineHeightSpan.textContent = lineHeightSlider.value;
+        // 默认字体显示为简体优化版本
+        fontFamilySpan.textContent = fontFamilySelect.options[fontFamilySelect.selectedIndex]?.text || "系统默认(简体)";
 
+        // 字号调节
         fontSizeSlider.addEventListener('input', function() {
             const val = this.value + 'px';
             contentFrame.style.fontSize = val;
             fontSizeSpan.textContent = val;
         });
 
+        // 行间距调节
         lineHeightSlider.addEventListener('input', function() {
             const val = this.value;
             contentFrame.style.lineHeight = val;
             lineHeightSpan.textContent = val;
         });
 
+        // 字体切换（保证简体中文显示最佳）
         fontFamilySelect.addEventListener('change', function() {
-            const font = this.value;
+            let font = this.value;
+            // 特殊处理确保简体中文字体最终生效
             contentFrame.style.fontFamily = font;
             fontFamilySpan.textContent = this.options[this.selectedIndex].text;
         });
 
-        function setTheme(theme) {
+        // 主题切换（完整支持简体界面配色）
+        function setTheme(theme, btnElement) {
+            // 移除所有主题类
             document.body.className = theme;
-            document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            // 更新按钮激活样式
+            const allBtns = document.querySelectorAll('.theme-btn');
+            allBtns.forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            // 根据主题同步色盘值
             if (theme === 'light') {
                 bgColorPicker.value = '#ffffff';
                 textColorPicker.value = '#333333';
+                document.body.style.backgroundColor = '';
+                document.querySelector('.reader-container').style.backgroundColor = '';
+                contentFrame.style.color = '';
             } else if (theme === 'dark') {
                 bgColorPicker.value = '#1e1e1e';
                 textColorPicker.value = '#d4d4d4';
+                document.body.style.backgroundColor = '';
+                document.querySelector('.reader-container').style.backgroundColor = '';
+                contentFrame.style.color = '';
             } else if (theme === 'sepia') {
                 bgColorPicker.value = '#fbf0d9';
                 textColorPicker.value = '#5b4636';
+                document.body.style.backgroundColor = '';
+                document.querySelector('.reader-container').style.backgroundColor = '';
+                contentFrame.style.color = '';
             } else if (theme === 'paper') {
                 bgColorPicker.value = '#fef7e9';
                 textColorPicker.value = '#3e2e23';
+                document.body.style.backgroundColor = '';
+                document.querySelector('.reader-container').style.backgroundColor = '';
+                contentFrame.style.color = '';
             }
+            // 确保自定义背景/文字颜色变量不残留冲突
+            setCustomBg(bgColorPicker.value);
+            setCustomColor(textColorPicker.value);
         }
 
+        // 自定义背景色（覆盖主题但保留字体简体显示）
         function setCustomBg(color) {
             document.body.style.backgroundColor = color;
-            document.querySelector('.reader-container').style.backgroundColor = color;
+            const container = document.querySelector('.reader-container');
+            if (container) container.style.backgroundColor = color;
         }
 
+        // 自定义文字颜色
         function setCustomColor(color) {
-            document.body.style.color = color;
             contentFrame.style.color = color;
+            // 保留导航链接样式不受整体文字颜色过度影响，但保持可读性
         }
 
+        // 重置为当前主题配色（保证重置后依旧是简体界面）
         function resetToTheme() {
             const currentTheme = document.body.className;
             if (currentTheme === 'light') {
@@ -449,10 +512,76 @@
             } else if (currentTheme === 'paper') {
                 bgColorPicker.value = '#fef7e9';
                 textColorPicker.value = '#3e2e23';
+            } else {
+                // 若没有主题类，默认按亮色重置
+                bgColorPicker.value = '#ffffff';
+                textColorPicker.value = '#333333';
             }
             setCustomBg(bgColorPicker.value);
             setCustomColor(textColorPicker.value);
+            // 同时将激活的主题按钮高亮修正
+            const activeTheme = document.body.className || 'light';
+            const btns = document.querySelectorAll('.theme-btn');
+            btns.forEach(btn => {
+                const btnTheme = btn.innerText === '亮色' ? 'light' : (btn.innerText === '深色' ? 'dark' : (btn.innerText === '护眼' ? 'sepia' : (btn.innerText === '纸色' ? 'paper' : '')));
+                if (btnTheme === activeTheme) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
         }
+
+        // 额外保证初次加载时，如果自定义背景未改动，body背景与容器背景一致
+        window.addEventListener('DOMContentLoaded', () => {
+            // 确保阅读区默认字体继承自body，简体优化
+            if (!contentFrame.style.fontFamily) {
+                contentFrame.style.fontFamily = '';
+            }
+            // 同步行距、字号显示和实际样式
+            const computedStyle = getComputedStyle(contentFrame);
+            const currentFontSize = parseInt(computedStyle.fontSize);
+            const currentLineHeight = parseFloat(computedStyle.lineHeight);
+            if (!isNaN(currentFontSize) && currentFontSize !== parseInt(fontSizeSlider.value)) {
+                fontSizeSlider.value = currentFontSize;
+                fontSizeSpan.textContent = currentFontSize + 'px';
+            }
+            if (!isNaN(currentLineHeight) && currentLineHeight !== parseFloat(lineHeightSlider.value)) {
+                lineHeightSlider.value = currentLineHeight;
+                lineHeightSpan.textContent = currentLineHeight;
+            }
+            // 主题按钮初始化高亮保证正确
+            const initTheme = document.body.className || 'light';
+            const btns = document.querySelectorAll('.theme-btn');
+            btns.forEach(btn => {
+                const btnText = btn.innerText.trim();
+                let btnTheme = '';
+                if (btnText === '亮色') btnTheme = 'light';
+                else if (btnText === '深色') btnTheme = 'dark';
+                else if (btnText === '护眼') btnTheme = 'sepia';
+                else if (btnText === '纸色') btnTheme = 'paper';
+                if (btnTheme === initTheme) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            // 手机端关闭初始化折叠状态（非展开）
+            if (window.innerWidth <= 800) {
+                controlPanel.classList.remove('expanded');
+            }
+        });
+
+        // 确保滚动时标题不会重叠，并且锚点平滑
+        document.querySelectorAll('#toc-panel a, .nav-links a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                const href = this.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    e.preventDefault();
+                    const targetId = href.substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        // 更新url哈希但不会跳转生硬
+                        history.pushState(null, '', href);
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>

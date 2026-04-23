@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>作者作品批量下载</title>
+    <style>
+        /* 复制 index.html 中的样式，或者简单写 */
+        body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>批量下载作者所有作品</h1>
+    <form action="/author/parse" method="post">
+        <label>作者页URL:</label>
+        <input type="url" name="author_url" required>
+        <button type="submit">解析作品列表</button>
+    </form>
+</body>
+</html>

@@ -1,42 +1,417 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>小说爬虫控制台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>小说爬虫控制台 - 在线书架</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; }
-        input[type=url], input[type=text] {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        button { background: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
-        button:hover { background: #2980b9; }
-        .note { margin-top: 20px; color: #7f8c8d; font-size: 0.9em; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 30px 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        /* 头部区域 */
+        .header {
+            padding: 28px 32px 16px 32px;
+            border-bottom: 1px solid #eef2f6;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            background: #ffffff;
+        }
+
+        h1 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            color: #1e2a3e;
+            letter-spacing: -0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1::before {
+            content: "🕸️";
+            font-size: 1.8rem;
+        }
+
+        /* 书架导航按钮 (链接) */
+        .shelf-link {
+            background: #f8fafc;
+            border-radius: 40px;
+            padding: 8px 20px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: #2c3e50;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #e2e8f0;
+            backdrop-filter: blur(2px);
+        }
+
+        .shelf-link:hover {
+            background: #eef2ff;
+            border-color: #3498db;
+            color: #1e40af;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .shelf-link:active {
+            transform: translateY(1px);
+        }
+
+        /* 主要内容区 */
+        .main-content {
+            padding: 28px 32px 36px 32px;
+        }
+
+        .info-box {
+            background: #eef6fc;
+            border-left: 5px solid #3498db;
+            padding: 16px 20px;
+            border-radius: 14px;
+            margin-bottom: 28px;
+            font-size: 0.9rem;
+            color: #1e4663;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .info-box p {
+            margin: 6px 0;
+        }
+
+        .info-box strong {
+            color: #0c4e6e;
+        }
+
+        .form-section {
+            background: #fefefe;
+            border-radius: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1e2a3e;
+            font-size: 0.9rem;
+        }
+
+        input[type="url"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #cfdee9;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            font-family: inherit;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52,152,219,0.15);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f9fafb;
+            padding: 12px 16px;
+            border-radius: 16px;
+            margin: 16px 0 12px;
+        }
+
+        .checkbox-group input {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            accent-color: #3498db;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            font-weight: 500;
+            color: #1f3a4b;
+            cursor: pointer;
+        }
+
+        button {
+            background: linear-gradient(95deg, #2c6e9e 0%, #3498db 100%);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            background: linear-gradient(95deg, #1f5a87 0%, #2c81ba 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(52,152,219,0.2);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .note {
+            margin-top: 24px;
+            padding: 14px 16px;
+            background: #fafcfd;
+            border-radius: 16px;
+            color: #4b6b87;
+            font-size: 0.85rem;
+            border: 1px solid #e9edf2;
+            text-align: center;
+        }
+
+        .note a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .note a:hover {
+            text-decoration: underline;
+        }
+
+        /* 底部导航区 - 书架链接强化 */
+        .nav-links {
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid #eef2f6;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #4a627a;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 0;
+        }
+
+        .nav-links a:hover {
+            color: #3498db;
+            transform: translateY(-1px);
+        }
+
+        .nav-links .library-link {
+            background: #eef2ff;
+            padding: 6px 18px;
+            border-radius: 40px;
+            color: #1e3a8a;
+            font-weight: 600;
+        }
+
+        .nav-links .library-link:hover {
+            background: #d9e6ff;
+            color: #0f2b6d;
+        }
+
+        hr {
+            margin: 10px 0;
+            border: none;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        /* 响应式 */
+        @media (max-width: 640px) {
+            body {
+                padding: 16px;
+            }
+            .header {
+                padding: 20px 20px 12px 20px;
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+            .main-content {
+                padding: 20px 22px 28px;
+            }
+            h1 {
+                font-size: 1.6rem;
+            }
+            .shelf-link {
+                align-self: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📖 小说爬虫启动器</h1>
-        <p>输入小说的<strong>目录页URL</strong>或<strong>任意章节页URL</strong>，点击开始抓取。程序将自动识别页面类型并抓取全部章节。</p>
-        <form action="/start" method="post">
-            <!-- 可选的小说名称，若留空则从页面自动提取 -->
-            <label for="novel_name">小说名称（可选，留空则自动提取）</label>
-            <input type="text" id="novel_name" name="novel_name" placeholder="例如：凡人修仙传">
+<div class="container">
+    <!-- 头部区域：标题 + 书架快捷入口（/library） -->
+    <div class="header">
+        <h1>小说爬虫控制台</h1>
+        <a href="/library" class="shelf-link" title="查看已收藏/下载的小说">
+            📚 我的书架
+        </a>
+    </div>
 
-            <label for="url">小说起始页URL（目录页或第一章均可）</label>
-            <input type="url" id="url" name="url" placeholder="输入目录页或任意章节页的URL" required>
-            <input type="checkbox" id="incremental" name="incremental" checked> 增量模式（跳过已下载章节）
-            <button type="submit">开始抓取</button>
-        </form>
+    <div class="main-content">
+        <!-- 温馨说明 + 使用指引 -->
+        <div class="info-box">
+            <p>✨ <strong>智能爬虫引擎</strong> · 支持主流小说站目录/章节页自动识别</p>
+            <p>📖 输入小说目录页或任意章节页URL，一键抓取全部章节，自动保存为TXT文本。</p>
+            <p>⚡ 增量模式自动跳过已下载章节，避免重复劳动。</p>
+        </div>
+
+        <!-- 单本下载表单（原核心功能） -->
+        <div class="form-section">
+            <form action="/start" method="post">
+                <div class="form-group">
+                    <label for="novel_name">📝 小说名称 <span style="font-weight: normal; color:#6c86a3;">（可选，留空自动提取）</span></label>
+                    <input type="text" id="novel_name" name="novel_name" placeholder="例如：凡人修仙传、诡秘之主" autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label for="url">🔗 小说起始页URL <span style="color:#e67e22;">*</span></label>
+                    <input type="url" id="url" name="url" placeholder="https://example.com/目录.html 或 任意章节页" required>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="incremental_single" name="incremental" value="true" checked>
+                    <label for="incremental_single">🔄 增量模式（智能跳过已存在的章节，断点续传）</label>
+                </div>
+
+                <button type="submit">🚀 开始抓取</button>
+            </form>
+        </div>
+        <!-- 批量下载作者作品区块 -->
+<div class="form-section" style="margin-top: 40px; border-top: 2px dashed #e9edf2; padding-top: 25px;">
+    <h3 style="margin-bottom: 20px; font-weight: 600; color: #2c3e50;">📚 批量下载作者全部作品</h3>
+    <form action="/author/parse" method="post">
+        <div class="form-group">
+            <label for="author_url">👤 作者页URL</label>
+            <input type="url" id="author_url" name="author_url" placeholder="例如：https://www.kanunu8.com/zj/11621.html" required>
+        </div>
+        <div class="checkbox-group" style="margin-bottom: 15px;">
+            <input type="checkbox" id="proxy_batch" name="use_global_proxy" value="1">
+            <label for="proxy_batch">使用上方代理地址（如需代理请先填写）</label>
+        </div>
+        <button type="submit" style="background: linear-gradient(95deg, #8e44ad, #9b59b6);">🔍 解析作者作品</button>
+    </form>
+    <div class="note" style="margin-top: 15px;">
+        💡 提示：输入作者页 URL（例如 `https://www.kanunu8.com/zj/11621.html`），系统将列出该作者的所有小说，供您勾选下载。
+    </div>
+</div>
+
+<div class="form-group">
+    <label for="proxy_url">代理地址（可选）</label>
+    <div class="proxy-input-group">
+        <input type="text" id="proxy_url" name="proxy_url" 
+               placeholder="例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080" 
+               class="form-control" style="width: 70%; display: inline-block;">
+        <button type="button" id="testProxyBtn" class="btn btn-secondary">测试连通性</button>
+    </div>
+    <small class="form-text text-muted">支持 HTTP/HTTPS/SOCKS5 代理，如需认证请填写完整地址：http://user:pass@host:port</small>
+    <div id="proxyTestResult" style="margin-top: 5px; font-size: 0.9em;"></div>
+</div>
+
+<script>
+    // 使用原生 JavaScript，确保在 DOM 加载完成后绑定事件
+    document.addEventListener('DOMContentLoaded', function() {
+        const testBtn = document.getElementById('testProxyBtn');
+        const proxyInput = document.getElementById('proxy_url');
+        const resultDiv = document.getElementById('proxyTestResult');
+
+        if (testBtn) {
+            testBtn.addEventListener('click', function() {
+                const proxyUrl = proxyInput.value.trim();
+                if (!proxyUrl) {
+                    resultDiv.innerHTML = '<span style="color: orange;">请填写代理地址</span>';
+                    return;
+                }
+                resultDiv.innerHTML = '<span style="color: blue;">正在测试...</span>';
+                
+                fetch('/api/test_proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxy_url: proxyUrl })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        resultDiv.innerHTML = '<span style="color: green;">✓ ' + data.message + '</span>';
+                    } else {
+                        resultDiv.innerHTML = '<span style="color: red;">✗ ' + data.message + '</span>';
+                    }
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '<span style="color: red;">请求失败：' + error.message + '</span>';
+                });
+            });
+        }
+    });
+</script>
+        <!-- 辅助说明 + 书架引导 -->
         <div class="note">
-            <p>抓取过程将在后台进行，您可以随时查看实时日志。</p>
-            <p>已完成的小说可在阅读器中浏览（日志页面会自动出现进入按钮）。</p>
+            💡 提示：抓取完成后，小说文件将保存在服务器指定目录。<br>
+            前往 <strong><a href="/library" style="font-weight:600;">📚 我的书架 (/library)</a></strong> 可查看所有已下载的小说，支持在线阅读、管理。
+        </div>
+
+        <!-- 底部导航链接区 - 再次突出书架链接，符合常规站点结构 -->
+        <div class="nav-links">
+            <a href="/" title="返回控制台首页">🏠 控制台首页</a>
+            <a href="/library" class="library-link" title="访问个人书架">📖 我的书架</a>
+            <a href="#" title="帮助文档（模拟）">❓ 使用帮助</a>
+        </div>
+
+        <!-- 隐式功能提醒：表明/library路由的存在意义 -->
+        <div style="margin-top: 20px; font-size: 12px; color: #8ba0b5; text-align: center; border-top: 1px dashed #e9edf2; padding-top: 18px;">
+            🧩 爬虫引擎 v2.0 | 支持断点续传 · 智能章节过滤 · 书架集中管理
         </div>
     </div>
+</div>
+
+<!-- 没有任何多余的tab切换脚本，确保页面干净整洁，但保留原有的增量模式行为 -->
+<!-- 由于删除了原来不完整的批量tab及无效的js引用，避免报错，提升体验 -->
+<!-- 额外增加书架链接已在三处（header，note内链接，底部专用链接）满足 /library 指向 -->
 </body>
 </html>

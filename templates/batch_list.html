@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量任务列表 - 小说爬虫系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            color: white;
+        }
+        .header h1 {
+            margin-bottom: 10px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            transition: all 0.3s;
+        }
+        .nav-links a:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .card {
+            background: #16213e;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 20px;
+            background: #0f3460;
+            border-bottom: 1px solid #2a3a5a;
+        }
+        .card-header h2 {
+            color: #eee;
+        }
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .task-table th,
+        .task-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #2a3a5a;
+            color: #ddd;
+        }
+        .task-table th {
+            background: #0f3460;
+            color: #667eea;
+            font-weight: 600;
+        }
+        .task-table tr:hover {
+            background: #1a2a4a;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-running {
+            background: #f59e0b;
+            color: white;
+        }
+        .status-finished {
+            background: #10b981;
+            color: white;
+        }
+        .status-error {
+            background: #ef4444;
+            color: white;
+        }
+        .btn {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .btn-view {
+            background: #667eea;
+            color: white;
+        }
+        .btn-view:hover {
+            background: #5a67d8;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: #888;
+        }
+        .progress-mini {
+            width: 100px;
+            background: #2a3a5a;
+            border-radius: 10px;
+            height: 6px;
+            overflow: hidden;
+        }
+        .progress-mini-fill {
+            background: #667eea;
+            height: 100%;
+            width: 0%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 批量任务列表</h1>
+            <p>查看所有批量下载任务的历史记录</p>
+            <div class="nav-links">
+                <a href="/batch">➕ 新建批量任务</a>
+                <a href="/">🏠 单本下载</a>
+                <a href="/library">📖 小说库</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>📦 历史任务</h2>
+            </div>
+            {% if batch_tasks %}
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>任务ID</th>
+                        <th>作者</th>
+                        <th>状态</th>
+                        <th>进度</th>
+                        <th>开始时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in batch_tasks %}
+                    <tr>
+                        <td><code>{{ task.batch_id[:20] }}...</code></td>
+                        <td>{{ task.author_name or '未知' }}</td>
+                        <td>
+                            {% if task.status == 'running' %}
+                            <span class="status-badge status-running">运行中</span>
+                            {% elif task.status == 'finished' %}
+                            <span class="status-badge status-finished">已完成</span>
+                            {% elif task.status == 'error' %}
+                            <span class="status-badge status-error">出错</span>
+                            {% else %}
+                            <span class="status-badge">未知</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span>{{ task.completed }}/{{ task.total }}</span>
+                                <div class="progress-mini">
+                                    <div class="progress-mini-fill" style="width: {% if task.total > 0 %}{{ (task.completed + task.failed) / task.total * 100 }}{% else %}0{% endif %}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ task.start_time }}</td>
+                        <td>
+                            <a href="/batch_logs/{{ task.batch_id }}" class="btn btn-view">查看详情</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>暂无批量任务</p>
+                <a href="/batch" class="btn btn-view" style="margin-top: 15px;">创建第一个批量任务</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
