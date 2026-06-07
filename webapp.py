@@ -1,578 +1,782 @@
-# webapp.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import time
+"""
+小说爬虫 - 通用版 + 52shuku 专项优化 + 2kzw.la 适配
+支持：目录页、单章页、作者页批量抓取、增量更新。
+"""
+
 import requests
-import threading
-import json
-import fcntl
-import tempfile
-import hashlib
+import urllib3
+from bs4 import BeautifulSoup
+import time
+import random
+import os
 import re
-from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
-from crawler import run_crawler, generate_html_from_txt, parse_author_page
-# ==================== 基础配置 ====================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app = Flask(__name__,
-            template_folder=os.path.join(BASE_DIR, 'templates'))
-print("模板文件夹路径:", app.template_folder)
+import hashlib
+from urllib.parse import urljoin
 
-OUTPUT_DIR = os.path.join(BASE_DIR, 'novels')
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-TASKS_FILE = os.path.join(BASE_DIR, 'tasks.json')
-TASKS_LOCK_FILE = TASKS_FILE + '.lock'
-META_FILE = os.path.join(BASE_DIR, 'library_meta.json')
-META_LOCK_FILE = META_FILE + '.lock'
+# ==================== 配置 ====================
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (iPad; CPU OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0'
+]
 
-# ==================== 任务存储（文件版，原子写入+锁）====================
-def read_tasks():
-    """安全读取任务字典（共享锁）"""
-    with open(TASKS_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_SH)
-        try:
-            with open(TASKS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
-    return data
+# 示例代理池，用户可以根据需要添加
+PROXY_POOL = [
+    # 'http://user:pass@host:port',
+    # 'http://host:port'
+]
 
-def write_tasks(tasks):
-    """原子写入任务字典（独占锁+临时文件替换）"""
-    with open(TASKS_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
-        fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(TASKS_FILE), prefix='tasks_')
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as temp_f:
-                json.dump(tasks, temp_f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, TASKS_FILE)
-        except Exception:
-            os.unlink(temp_path)
-            raise
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
+# 尝试从外部文件加载代理
+if os.path.exists('proxies.txt'):
+    with open('proxies.txt', 'r', encoding='utf-8') as f:
+        PROXY_POOL.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
 
-def get_task(task_id):
-    tasks = read_tasks()
-    return tasks.get(task_id)
-
-def save_task(task_id, task):
-    tasks = read_tasks()
-    tasks[task_id] = task
-    write_tasks(tasks)
-
-def append_task_log(task_id, msg):
-    tasks = read_tasks()
-    if task_id in tasks:
-        tasks[task_id]['log'].append(f"[{time.strftime('%H:%M:%S')}] {msg}")
-        write_tasks(tasks)
-
-def log_message(task_id, msg):
-    append_task_log(task_id, msg)
-
-# ==================== 小说元数据读写（原子写入+锁）====================
-def read_meta():
-    """安全读取元数据（共享锁）"""
-    with open(META_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_SH)
-        try:
-            with open(META_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
-
-def write_meta(meta):
-    """原子写入元数据（独占锁+临时文件替换）"""
-    with open(META_LOCK_FILE, 'w') as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
-        fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(META_FILE), prefix='meta_')
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as temp_f:
-                json.dump(meta, temp_f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, META_FILE)
-        except Exception:
-            os.unlink(temp_path)
-            raise
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
-
-# ==================== 章节哈希处理 ====================
-def get_chapter_hash(url):
-    """返回URL的MD5哈希值，作为章节唯一标识"""
-    return hashlib.md5(url.encode('utf-8')).hexdigest()
-
-def get_existing_chapter_hashes(filename):
-    """从元数据中读取已下载章节的URL哈希集合"""
-    meta = read_meta()
-    file_meta = meta.get(filename, {})
-    return set(file_meta.get('chapters', []))
-
-def add_chapter_hashes(filename, new_hashes):
-    """将新下载的章节哈希追加到元数据中"""
-    meta = read_meta()
-    if filename not in meta:
-        meta[filename] = {}
-    existing = set(meta[filename].get('chapters', []))
-    existing.update(new_hashes)
-    meta[filename]['chapters'] = list(existing)
-    meta[filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
-    write_meta(meta)
+def get_random_headers(url=None):
+    ua = random.choice(USER_AGENTS)
+    headers = {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'keep-alive',
+    }
+    if url:
+        headers['Referer'] = url
+    return headers
 
 def sanitize_filename(name):
-    """清理文件名中的非法字符"""
     return re.sub(r'[\\/*?:"<>|\s]', '_', name)
 
-# ==================== 小说库功能 ====================
-def get_novel_list():
-    """扫描 novels 目录，返回所有 txt 文件的基本信息（使用元数据中的自定义名称）"""
-    novels = []
-    if not os.path.exists(OUTPUT_DIR):
-        return novels
+def get_url_hash(url):
+    return hashlib.md5(url.encode('utf-8')).hexdigest()
 
-    meta = read_meta()
+def find_next_page_link(soup, current_url, is_52shuku=False):
+    # 方法1：直接查找文本为“下一页”的链接
+    next_a = soup.find('a', string=re.compile(r'下一页|下页|下一章'))
+    if next_a and next_a.get('href'):
+        href = next_a['href']
+        if is_52shuku and href.endswith('/'): return None # 52shuku 下一页如果跳回目录通常是一级结尾
+        return urljoin(current_url, href)
 
-    for filename in os.listdir(OUTPUT_DIR):
-        if filename.endswith('.txt'):
-            filepath = os.path.join(OUTPUT_DIR, filename)
-            mtime = os.path.getmtime(filepath)
-            size = os.path.getsize(filepath)
+    # 方法2：查找 rel="next"
+    next_a = soup.find('a', attrs={'rel': 'next'})
+    if next_a and next_a.get('href'):
+        return urljoin(current_url, next_a['href'])
 
-            file_meta = meta.get(filename, {})
-            display_name = file_meta.get('custom_name', filename[:-4])
+    # 方法3：查找 class 包含 next 的链接
+    for a in soup.find_all('a', class_=re.compile(r'next', re.I)):
+        if a.get('href'):
+            return urljoin(current_url, a['href'])
 
-            # 粗略估算章节数（读取前4KB）
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    content = f.read(4096)
-                    chapter_count = content.count('\n=') + 1
-            except:
-                chapter_count = 0
+    # 方法4：查找文本包含“下一页”的任何链接
+    for a in soup.find_all('a', href=True):
+        text = a.get_text().strip()
+        if '下一页' in text or '下页' in text or '下一章' in text:
+            return urljoin(current_url, a['href'])
 
-            novels.append({
-                'filename': filename,
-                'name': display_name,
-                'mtime': time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime)),
-                'size': f'{size/1024:.1f} KB',
-                'chapter_estimate': chapter_count
-            })
+    return None
 
-    novels.sort(key=lambda x: x['mtime'], reverse=True)
-    return novels
+# ==================== 核心逻辑 ====================
 
-def read_txt_chapters(txt_path):
-    """读取 TXT 文件，按分隔线解析章节，返回章节列表 [(title, content_html), ...]"""
-    with open(txt_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    chapters_raw = re.split(r'\n={4,}\n', content)
-    chapters = []
-    for chap in chapters_raw:
-        if not chap.strip():
-            continue
-        lines = chap.strip().split('\n', 1)
-        title = lines[0].strip()
-        body = lines[1].strip() if len(lines) > 1 else ''
-        paragraphs = body.split('\n\n')
-        body_html = ''.join(f'<p>{p}</p>' for p in paragraphs if p.strip())
-        chapters.append({'title': title, 'content': body_html})
-    return chapters
-
-# ==================== 路由 ====================
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/start', methods=['POST'])
-def start_crawl():
-    start_url = request.form.get('url')
-    novel_name_input = request.form.get('novel_name', '').strip()
-    incremental = request.form.get('incremental', 'true').lower() == 'true'
-    proxy_url = request.form.get('proxy_url', '').strip()   # 新增：代理地址
-
-    if not start_url:
-        return jsonify({'error': 'URL不能为空'}), 400
-
-    task_id = str(int(time.time()))
-    task = {
-        'status': 'running',
-        'log': [],
-        'start_url': start_url,
-        'novel_name': None,
-        'safe_name': None,
-        'html_path': None,
-        'proxy_used': proxy_url or None   # 记录使用的代理（可选）
-    }
-    save_task(task_id, task)
-
-    # 准备已有章节哈希
-    existing_hashes = set()
-    if incremental and novel_name_input:
-        safe_name = sanitize_filename(novel_name_input)
-        existing_hashes = get_existing_chapter_hashes(safe_name + ".txt")
-
-    # 修改 task_worker 参数，增加 proxy_url
-    def task_worker(task_id, start_url, novel_name_input, existing_hashes, incremental, proxy_url):
-        log_message(task_id, f"任务 {task_id} 启动，起始URL: {start_url}")
-        if proxy_url:
-            log_message(task_id, f"使用代理：{proxy_url}")
-        if novel_name_input:
-            log_message(task_id, f"用户指定小说名: {novel_name_input}")
-        if incremental:
-            log_message(task_id, f"增量模式启用，已有章节数: {len(existing_hashes)}")
-        else:
-            log_message(task_id, "未选择增量模式，将重新下载全部章节")
-        try:
-            # 调用爬虫，传入代理地址
-            novel_name, txt_path, html_path = run_crawler(
-                start_url=start_url,
-                output_dir=OUTPUT_DIR,
-                log_callback=lambda msg: log_message(task_id, msg),
-                override_name=novel_name_input if novel_name_input else None,
-                existing_chapter_hashes=existing_hashes if incremental else None,
-                proxy=proxy_url if proxy_url else None   # 新增参数
-            )
-            if html_path:
-                safe_name = os.path.splitext(os.path.basename(html_path))[0]
-            else:
-                safe_name = sanitize_filename(novel_name) if novel_name else "unknown"
-            task = get_task(task_id)
-            task['status'] = 'finished'
-            task['novel_name'] = novel_name
-            task['safe_name'] = safe_name
-            task['html_path'] = html_path
-            save_task(task_id, task)
-            log_message(task_id, "任务完成")
-        except Exception as e:
-            import traceback
-            log_message(task_id, f"任务异常: {str(e)}")
-            log_message(task_id, traceback.format_exc())
-            task = get_task(task_id)
-            task['status'] = 'error'
-            save_task(task_id, task)
-
-    # 启动线程时传入 proxy_url
-    thread = threading.Thread(target=task_worker, args=(task_id, start_url, novel_name_input, existing_hashes, incremental, proxy_url))
-    thread.daemon = True
-    thread.start()
-    return redirect(url_for('logs', task_id=task_id))
-
-@app.route('/rename', methods=['POST'])
-def rename_novel():
-    """接收改名请求，更新元数据"""
-    data = request.get_json()
-    filename = data.get('filename')
-    new_name = data.get('new_name')
-
-    if not filename or not new_name:
-        return jsonify(success=False, error='缺少参数'), 400
-
-    if '..' in filename or '/' in filename or '\\' in filename:
-        return jsonify(success=False, error='非法文件名'), 400
-
-    filepath = os.path.join(OUTPUT_DIR, filename)
-    if not os.path.exists(filepath):
-        return jsonify(success=False, error='文件不存在'), 404
-
-    meta = read_meta()
-    if filename not in meta:
-        meta[filename] = {}
-    meta[filename]['custom_name'] = new_name.strip()
-    meta[filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
-    write_meta(meta)
-
-    return jsonify(success=True, new_name=new_name)
-
-@app.route('/delete', methods=['POST'])
-def delete_novel():
-    """删除小说文件及其元数据，并删除同名 HTML"""
-    data = request.get_json()
-    filename = data.get('filename')
-
-    if not filename:
-        return jsonify(success=False, error='缺少文件名'), 400
-
-    if '..' in filename or '/' in filename or '\\' in filename:
-        return jsonify(success=False, error='非法文件名'), 400
-
-    filepath = os.path.join(OUTPUT_DIR, filename)
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        return jsonify(success=False, error='文件不存在'), 404
-
-    try:
-        os.remove(filepath)
-
-        # 删除同名 HTML 文件
-        base = os.path.splitext(filename)[0]
-        html_path = os.path.join(OUTPUT_DIR, base + '.html')
-        if os.path.exists(html_path):
-            os.remove(html_path)
-
-        # 删除元数据
-        meta = read_meta()
-        if filename in meta:
-            del meta[filename]
-            write_meta(meta)
-
-        return jsonify(success=True)
-    except Exception as e:
-        return jsonify(success=False, error=str(e)), 500
-        
-from werkzeug.utils import secure_filename
-
-# 允许上传的文件扩展名
-ALLOWED_EXTENSIONS = {'txt'}
-MAX_CONTENT_LENGTH = 3 * 1024 * 1024  # 3MB
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/upload', methods=['POST'])
-def upload_novel():
-    """上传 TXT 小说文件，自动生成 HTML 并加入书架"""
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': '未找到文件'}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': '文件名为空'}), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({'success': False, 'error': '仅支持 .txt 文件'}), 400
-
-    # 文件大小检查（Flask 默认限制，此处额外检查）
-    file.seek(0, os.SEEK_END)
-    size = file.tell()
-    file.seek(0)
-    if size > MAX_CONTENT_LENGTH:
-        return jsonify({'success': False, 'error': '文件大小超过 3MB'}), 400
-
-    # 获取自定义书名（如果提供）
-    custom_name = request.form.get('novel_name', '').strip()
-    original_basename = os.path.splitext(file.filename)[0]
-
-    if custom_name:
-        # 使用用户输入的书名作为显示名和文件名
-        safe_basename = sanitize_filename(custom_name)
-        display_name = custom_name
-    else:
-        safe_basename = sanitize_filename(original_basename)
-        display_name = original_basename
-
-    txt_filename = safe_basename + '.txt'
-    txt_path = os.path.join(OUTPUT_DIR, txt_filename)
-
-    # 如果文件已存在，可以选择覆盖（这里直接覆盖，并更新元数据）
-    # 也可以返回错误，根据需求调整
-    try:
-        file.save(txt_path)
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'保存文件失败：{str(e)}'}), 500
-
-    # 生成对应的 HTML 阅读文件
-    try:
-        html_path = generate_html_from_txt(txt_path, display_name)
-    except Exception as e:
-        # 如果生成 HTML 失败，不影响小说入库，但记录日志
-        print(f"生成 HTML 失败：{e}")
-        html_path = None
-
-    # 更新元数据（记录自定义名称和章节哈希，可选）
-    meta = read_meta()
-    if txt_filename not in meta:
-        meta[txt_filename] = {}
-    meta[txt_filename]['custom_name'] = display_name
-    meta[txt_filename]['last_modified'] = time.strftime('%Y-%m-%d %H:%M:%S')
-    # 可选：解析章节哈希（简单处理，先留空，实际可调用解析函数）
-    meta[txt_filename]['chapters'] = meta[txt_filename].get('chapters', [])
-    write_meta(meta)
-
-    return jsonify({'success': True, 'name': display_name, 'filename': txt_filename})
+def fetch_html(session, url, headers=None, proxy=None, retries=3):
+    if not headers:
+        headers = get_random_headers(url)
     
-@app.route('/logs/<task_id>')
-def logs(task_id):
-    """显示任务日志页面"""
-    task = get_task(task_id)
-    if not task:
-        return "任务不存在", 404
-    return render_template('logs.html', task_id=task_id, task=task)
-
-@app.route('/api/logs/<task_id>')
-def api_logs(task_id):
-    """API获取最新日志（用于轮询）"""
-    task = get_task(task_id)
-    if not task:
-        return jsonify({'error': 'not found'}), 404
-    return jsonify({
-        'status': task['status'],
-        'log': task['log'],
-        'novel_name': task.get('novel_name'),
-        'safe_name': task.get('safe_name'),
-        'html_path': task.get('html_path')
-    })
-
-@app.route('/library')
-def library():
-    """小说库主页，列出所有小说"""
-    novels = get_novel_list()
-    return render_template('library.html', novels=novels)
-
-@app.route('/read/<filename>')
-def read_novel(filename):
-    """动态阅读 TXT 小说"""
-    safe_name = os.path.basename(filename)
-    if not safe_name.endswith('.txt'):
-        safe_name += '.txt'
-    filepath = os.path.join(OUTPUT_DIR, safe_name)
-    if not os.path.exists(filepath):
-        abort(404, description="小说文件不存在")
-
-    try:
-        chapters = read_txt_chapters(filepath)
-    except Exception as e:
-        abort(500, description=f"解析文件失败：{str(e)}")
-
-    novel_name = safe_name[:-4]
-    return render_template('reader_txt.html', novel_name=novel_name, chapters=chapters)
-
-@app.route('/reader/<path:novel_name>')
-def reader(novel_name):
-    """兼容旧版：若 HTML 存在则渲染，否则重定向到动态阅读器"""
-    html_path = os.path.join(OUTPUT_DIR, novel_name, novel_name + '.html')
-    if os.path.exists(html_path):
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        return render_template('reader.html', novel_name=novel_name, html_content=html_content)
-    else:
-        return redirect(url_for('read_novel', filename=novel_name + '.txt'))
-# 在 webapp.py 中新增以下路由（放在其他路由附近）
-
-@app.route('/api/test_proxy', methods=['POST'])
-def test_proxy():
-    data = request.get_json()
-    proxy_url = data.get('proxy_url', '').strip()
-    if not proxy_url:
-        return jsonify({'success': False, 'message': '代理地址不能为空'})
-
-    proxies = {'http': proxy_url, 'https': proxy_url}
-    try:
-        start_time = time.time()
-        # 改用 HTTP 协议测试（避免 SSL 错误）
-        resp = requests.get('http://www.baidu.com', proxies=proxies, timeout=10, verify=False)
-        elapsed = (time.time() - start_time) * 1000
-        if resp.status_code == 200:
-            return jsonify({'success': True, 'message': f'连通成功，响应时间 {elapsed:.0f} ms'})
-        else:
-            return jsonify({'success': False, 'message': f'代理返回异常状态码：{resp.status_code}'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'代理测试失败：{str(e)}'})
+    current_proxy = proxy
+    if not current_proxy and PROXY_POOL:
+        current_proxy = random.choice(PROXY_POOL)
         
-@app.route('/author')
-def author_form():
-    """作者页输入表单"""
-    return render_template('author_form.html')
+    for attempt in range(retries):
+        try:
+            proxies = {'http': current_proxy, 'https': current_proxy} if current_proxy else None
+            resp = session.get(url, headers=headers, timeout=15, proxies=proxies, verify=False)
+            
+            if resp.status_code == 200:
+                # 检查常见的防护页面特征
+                challenge_keywords = ["安全验证", "Cloudflare", "5秒", "浏览器安全性检查", "请稍候", "Checking your browser", "Verification"]
+                if any(k in resp.text for k in challenge_keywords) and len(resp.text) < 5000:
+                    print(f"Detected block/challenge for {url} (Attempt {attempt+1})")
+                    if attempt < retries - 1:
+                        time.sleep(6) # 稍微多等一会儿让挑战过期
+                        continue
+                
+                if 'kanunu8.com' in url:
+                    resp.encoding = 'gbk'
+                elif 'xbanxia.cc' in url:
+                    resp.encoding = 'utf-8'
+                else:
+                    resp.encoding = resp.apparent_encoding if resp.apparent_encoding else 'utf-8'
+                return resp.text
+            
+            print(f"Fetch failed with status {resp.status_code} for {url} (Attempt {attempt+1}/{retries})")
+            if resp.status_code in [403, 503, 429]: # Likely blocked or rate limited
+                time.sleep(3 * (attempt + 1))
+            
+        except Exception as e:
+            print(f"Fetch Error ({url}) Attempt {attempt+1}/{retries}: {e}")
+            if attempt < retries - 1:
+                time.sleep(2 * (attempt + 1))
+            else:
+                return None
+    return None
 
-@app.route('/author/parse', methods=['POST'])
-def author_parse():
-    """解析作者页，返回作品列表供用户勾选"""
-    author_url = request.form.get('author_url', '').strip()
-    if not author_url:
-        return jsonify({'error': '作者页URL不能为空'}), 400
+def parse_author_page(author_url, log_callback=None, proxy=None):
+    """解析作者页作品列表"""
+    session = requests.Session()
+    session.verify = False
+    
+    # 在抓取作者页前稍微等待，特别是频繁解析时
+    time.sleep(1)
+    
+    # 确保 URL 中的非 ASCII 字符被正确编码
+    from urllib.parse import quote, urlparse
+    parsed = urlparse(author_url)
+    author_url = f"{parsed.scheme}://{parsed.netloc}{quote(parsed.path)}"
+    
+    html = fetch_html(session, author_url, proxy=proxy)
+    if not html: 
+        # 尝试再次获取，可能需要换个 UA 
+        html = fetch_html(session, author_url, proxy=proxy)
+        if not html:
+            raise Exception(f"无法获取作者页: {author_url}。可能是被拦截或地址错误。建议使用代理。")
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    author_name = "未知作者"
+    
+    # 尝试多种作者名获取方式
+    bc = soup.select_one('div.breadcrumbs, .breadcrumb, .place')
+    if bc:
+        match = re.search(r'([^\s>]+)(?:小说作品|的全部作品|的小說作品)', bc.text)
+        if match: author_name = match.group(1)
+    
+    if author_name == "未知作者":
+        h1 = soup.find('h1')
+        if h1: 
+            author_name = h1.text.replace('的全部小说作品', '').replace('的全部小說作品', '').strip()
+    
+    if author_name == "未知作者":
+        title_tag = soup.find('title')
+        if title_tag:
+            match = re.search(r'^(.+?)(?:小说作品|的全部作品|的小說作品)', title_tag.text)
+            if match: author_name = match.group(1).strip()
 
-    try:
-        author_name, works = parse_author_page(author_url, log_callback=lambda msg: print(msg))
-    except Exception as e:
-        return render_template('author_select.html', error=str(e), author_url=author_url)
+    works = []
+    # 针对不同站点的特殊处理
+    if 'xbanxia' in author_url:
+        # 半夏小说列表改进：支持更多层级和样式
+        # 常见结构: <div class="list"> <ul> <li> <a href="...">...</a> </li> </ul> </div>
+        # 或 <div class="book-item"> <h3> <a ...> </h3> </div>
+        for a in soup.select('div.list li a, .list a, .book-item a, .book-list a, .bookname a, .item a'):
+            title = a.get_text(strip=True)
+            href = a.get('href')
+            if href and title and len(title) > 1:
+                # 过滤掉非书籍链接
+                if any(x in href for x in ['/books/', '/book/', '/novel/']) or re.search(r'/\d+(?:_\d+)?/?$', href):
+                    works.append({'title': title, 'url': urljoin(author_url, href)})
+    
+    # 通用的选择器兜底
+    if not works:
+        selectors = [
+            'article.excerpt header h2 a', 
+            'div.mulu-list ul li a',
+            '.book-list ul li a',
+            '.book-item a',
+            'li a[href*="/books/"]',
+            'li a[href*="/book/"]',
+            'li a[href*="/book5/"]',
+            '.author-works a',
+            'td a[href*="/book"]'
+        ]
+        
+        for sel in selectors:
+            for a in soup.select(sel):
+                title = a.get_text(strip=True)
+                href = a.get('href')
+                if href and len(title) > 1:
+                    if 'books/' in href or 'book/' in href or 'novel' in href:
+                        title = re.sub(r'^\d+\.\s*', '', title)
+                        works.append({'title': title, 'url': urljoin(author_url, href)})
+    
+    unique_works = []
+    seen = set()
+    for w in works:
+        if w['url'] not in seen:
+            seen.add(w['url'])
+            unique_works.append(w)
+            
+    return author_name, unique_works
 
-    # 将作品列表和作者名存储到 session 或临时传递，这里直接渲染页面
-    return render_template('author_select.html', author_name=author_name, works=works, author_url=author_url)
+def run_crawler(start_url, output_dir, log_callback=None, override_name=None, 
+                override_author=None, existing_chapter_hashes=None, proxy=None):
+    """主抓取流程"""
+    session = requests.Session()
+    session.verify = False
+    
+    html = fetch_html(session, start_url, proxy=proxy)
+    if not html: return None, None, None
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    h1 = soup.find('h1')
+    title_raw = h1.text.strip() if h1 else "Unknown"
+    novel_name = override_name if override_name else title_raw.split('_')[0].split('(')[0].split(',')[0].strip()
+    author_name = override_author if override_author else "佚名" # 默认抓取没做作者解析，这里支持覆盖
+    safe_name = sanitize_filename(novel_name)
+    
+    # 检测是否适合动态“下一页”抓取模式
+    content_div = (
+        soup.select_one('div.book_con.fix#text') or 
+        soup.select_one('#article') or
+        soup.select_one('.article-content') or
+        soup.select_one('#article-content') or
+        soup.select_one('.maintext') or
+        soup.select_one('#content') or
+        soup.select_one('.content') or
+        soup.select_one('#txt') or
+        soup.select_one('div.read-content') or
+        soup.select_one('article.article-content') or
+        soup.select_one('td[width="820"]') or
+        soup.select_one('div.main_content') or
+        soup.select_one('.post-content') or
+        soup.select_one('.chapter-content') or
+        soup.select_one('td p')
+    )
+    
+    is_52shuku = '52shuku.net' in start_url
+    next_page_link = find_next_page_link(soup, start_url, is_52shuku)
+    
+    if is_52shuku and not content_div:
+        # Detect directory page, grab first chapter for dynamic crawling bypass
+        first_chapter_url = None
+        base_match = re.search(r'([a-zA-Z0-9]+)\.html', start_url)
+        if base_match:
+            book_id = base_match.group(1)
+            pattern = rf'href=[\"\']([^\"\']*{re.escape(book_id)}(?:_\d+)?\.html)[\"\']'
+            found_links = []
+            for match in re.finditer(pattern, html):
+                found_links.append(urljoin(start_url, match.group(1)))
+            if found_links:
+                found_links = list(set(found_links))
+                if start_url in found_links: found_links.remove(start_url)
+                if found_links:
+                    # Sort to find the first chapter, usually ends with _2.html or similar
+                    def s_key(u):
+                        m = re.search(r'_(\d+)\.html$', u)
+                        return int(m.group(1)) if m else 0
+                    first_chapter_url = sorted(found_links, key=s_key)[0]
+        
+        if first_chapter_url:
+            if log_callback: log_callback(f"检测到目录页，跳转至第一页启动动态抓取: {first_chapter_url}")
+            start_url = first_chapter_url
+            html = fetch_html(session, start_url, proxy=proxy)
+            if html:
+                soup = BeautifulSoup(html, 'html.parser')
+                content_div = soup.select_one('div.book_con.fix#text')
+                next_page_link = find_next_page_link(soup, start_url, is_52shuku)
 
-@app.route('/batch_start', methods=['POST'])
-def batch_start():
-    """批量下载用户勾选的作品"""
-    selected_urls = request.form.getlist('selected_urls')
-    if not selected_urls:
-        return jsonify({'error': '请至少选择一部作品'}), 400
+    use_dynamic = False
+    if is_52shuku and content_div and next_page_link:
+        use_dynamic = True
+    elif content_div and next_page_link:
+        use_dynamic = True
+        
+    if use_dynamic:
+        if log_callback: log_callback(f"开始抓取: {novel_name}")
+        if log_callback: log_callback("采用动态“下一页”模式抓取")
+        
+        full_content = []
+        os.makedirs(output_dir, exist_ok=True)
+        txt_path = os.path.join(output_dir, f"{safe_name}.txt")
+        
+        current_url = start_url
+        visited = set()
+        page_num = 0
+        
+        current_html = html
+        current_soup = soup
+        
+        while current_url and current_url not in visited:
+            visited.add(current_url)
+            page_num += 1
+            
+            if log_callback: log_callback(f"处理中 [{page_num}/?] : {current_url}")
+            
+            c_div = (
+                current_soup.select_one('div.book_con.fix#text') or 
+                current_soup.select_one('#article') or
+                current_soup.select_one('.article-content') or
+                current_soup.select_one('#article-content') or
+                current_soup.select_one('.maintext') or
+                current_soup.select_one('#content') or
+                current_soup.select_one('.content') or
+                current_soup.select_one('#txt') or
+                current_soup.select_one('div.read-content') or
+                current_soup.select_one('article.article-content') or
+                current_soup.select_one('td[width="820"]') or
+                current_soup.select_one('div.main_content') or
+                current_soup.select_one('.post-content') or
+                current_soup.select_one('.chapter-content') or
+                current_soup.select_one('td p')
+            )
+            
+            if c_div:
+                for s in c_div(['script', 'ins', 'nav', 'style', 'div', 'iframe', 'button', 'input']): s.decompose()
+                
+                title_elem = current_soup.find('h1') or current_soup.find('h2') or current_soup.select_one('td strong')
+                page_title = title_elem.text.strip() if title_elem else f"第 {page_num} 章节"
+                
+                text = c_div.get_text(separator='\n')
+                lines = [l.strip() for l in text.split('\n') if l.strip()]
+                
+                filtered_lines = []
+                junk_keywords = [
+                    '52书库', '52shuku', '传送门', 'APP下载', '半夏小说', 'xbanxia', 'kanunu8', 
+                    '看书吧', 'www.', '.com', '.net', '本站域名', '2wxsi', '爱文学', 
+                    '喜欢就分享', '收藏本页', '返回首页', '点此报错', '举报反馈',
+                    '微信', '公众号', '扫码', '关注', '加入书架', '推荐书目', '最新章节',
+                    '下一页', '上一页'
+                ]
+                for line in lines:
+                    line_lower = line.lower()
+                    if not any(k.lower() in line_lower for k in junk_keywords):
+                        filtered_lines.append("　　" + line)
+                
+                separator_line = "=" * 40
+                page_header = f"\n\n{separator_line}\n【第 {page_num} 页】: {page_title}\n{separator_line}\n\n"
+                
+                full_content.append(page_header + "\n\n".join(filtered_lines))
+            
+            next_url = find_next_page_link(current_soup, current_url, is_52shuku)
+            
+            if is_52shuku and next_url:
+                base_match = re.search(r'([a-zA-Z0-9]+)(?:_\d+)?\.html', start_url)
+                if base_match:
+                    book_id = base_match.group(1)
+                    if book_id not in next_url:
+                        next_url = None
+            
+            if not next_url:
+                if log_callback: log_callback("未发现有效下一页链接，结束当前小说抓取。")
+                break
+                
+            current_url = next_url
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            p_html = fetch_html(session, current_url, proxy=proxy)
+            if not p_html:
+                break
+            current_soup = BeautifulSoup(p_html, 'html.parser')
 
-    # 可选：获取代理设置（可从表单传递或全局配置）
-    proxy_url = request.form.get('proxy_url', '').strip()
+        with open(txt_path, "a" if existing_chapter_hashes else "w", encoding="utf-8") as f:
+            if not existing_chapter_hashes: 
+                header = f"《{novel_name}》\n"
+                if author_name and author_name != "佚名":
+                    header += f"作者：{author_name}\n"
+                header += "\n"
+                f.write(header)
+            f.write("\n\n".join(full_content))
+            
+        return novel_name, txt_path, None
 
-    task_id = str(int(time.time()))
-    task = {
-        'status': 'running',
-        'log': [],
-        'type': 'batch',
-        'total': len(selected_urls),
-        'completed': 0,
-        'results': [],
-        'proxy_used': proxy_url or None
-    }
-    save_task(task_id, task)
+    # ==================== 提取目录链接 ====================
+    links = []
+    
+    # 特别针对 52shuku.net 的目录提取
+    if '52shuku.net' in start_url:
+        # 正则表达式兜底提取所有直接相关的分页链接
+        # 允许相对路径和绝对路径
+        base_match = re.search(r'([a-zA-Z0-9]+)(?:_\d+)?\.html', start_url)
+        if base_match:
+            book_id = base_match.group(1)
+            # 匹配包含 book_id 的 html 链接，比如 bjZ2n.html or bjZ2n_2.html
+            # 甚至是相对路径 /yanqing/18_b/bjZ2n_2.html
+            pattern = rf'href=[\"\']([^\"\']*{re.escape(book_id)}(?:_\d+)?\.html)[\"\']'
+            for match in re.finditer(pattern, html):
+                href = match.group(1)
+                full_url = urljoin(start_url, href)
+                if full_url not in links: links.append(full_url)
+                
+        # 52shuku 的目录通常在 <ul class="list clearfix"> <li> <a ...> 
+        # 或者 <div class="list"> 下的链接
+        # 特别注意有些目录页同时也包含了第一页内容
+        for a in soup.select('ul.list li a, .list li a, div.list a, #list a, .mulu a, .book-list a'):
+            href = a.get('href')
+            if href and ('.html' in href or re.search(r'_\d+\.html$', href)):
+                # 排除一些非正文链接
+                title = a.get_text(strip=True)
+                if not any(x in title for x in ['首页', '返回', '书评', '下载', '投诉', 'APP']):
+                    full_url = urljoin(start_url, href)
+                    if full_url not in links: links.append(full_url)
+        
+        # 针对有些直接是正文第一页的情况，提取底部的翻页/分页导航
+        if not links or len(links) < 5:
+            pagination = soup.select('.pagination a, .pagination2 a, .page-links a, .mulu-list a, .list a')
+            for a in pagination:
+                href = a.get('href')
+                if href and ('.html' in href or re.search(r'_\d+\.html', href)):
+                    full_url = urljoin(start_url, href)
+                    if full_url not in links: links.append(full_url)
+            
+            # 如果能从链接中推断出结尾页，自动补全所有的分页列表
+            base_url_match = re.search(r'^(.*?)(?:_\d+)?\.html', start_url)
+            if base_url_match:
+                base_url = base_url_match.group(1)
+                max_page = 1
+                for link in links:
+                    m = re.search(r'_(\d+)\.html', link)
+                    if m:
+                        page_num = int(m.group(1))
+                        if page_num > max_page:
+                            max_page = page_num
+                
+                if max_page > 1:
+                    for i in range(1, max_page + 1):
+                        p_url = f"{base_url}_{i}.html" if i > 1 else f"{base_url}.html"
+                        if p_url not in links: links.append(p_url)
+        
+        # 排除掉起始页自身（如果已经在列表中，移动到第一位）
+        if start_url in links:
+            links.remove(start_url)
+        
+        # 对于 52shuku.net，过滤掉纯目录页（没有 _数字.html 且在当前获取中没有正文框）
+        is_52shuku_dir_only = False
+        if '52shuku.net' in start_url:
+            if not soup.select_one('div.book_con.fix#text'):
+                is_52shuku_dir_only = True
+            
+            # 删除所有被错误添加的没有尾缀的可能是纯目录的链接
+            base_url_match = re.search(r'^(.*?)(?:_\d+)?\.html', start_url)
+            if base_url_match:
+                dir_url = f"{base_url_match.group(1)}.html"
+                if dir_url in links and start_url != dir_url:
+                    links.remove(dir_url)
+                    
+        if not is_52shuku_dir_only:
+            links.insert(0, start_url)
+        
+        # 排序：确保 _2.html 在 _10.html 之前
+        def sort_key(url):
+            match = re.search(r'_(\d+)\.html$', url)
+            if match: return int(match.group(1))
+            return 0
+        
+        if len(links) > 1:
+            # 只有当链接看起来像是分页（带有 _数字.html）时才排序
+            if any('_' in l for l in links[1:]):
+                first = links[0]
+                rest = sorted(links[1:], key=sort_key)
+                links = [first] + rest
 
-    def batch_worker():
-        log_message(task_id, f"批量下载任务启动，共 {len(selected_urls)} 部作品")
-        if proxy_url:
-            log_message(task_id, f"使用代理：{proxy_url}")
+        # 去重并保持顺序
+        seen = set()
+        links = [x for x in links if not (x in seen or seen.add(x))]
 
-        for idx, url in enumerate(selected_urls, 1):
-            log_message(task_id, f"开始下载第 {idx}/{len(selected_urls)} 部：{url}")
+        # 如果提取出的链接太少且不包含 _ 数字，可能这不是目录页而是单页
+    
+    # 特别针对 xbanxia.cc 的目录提取
+    if 'xbanxia.cc' in start_url:
+        # 半夏一般在 <div id="list"> 下的 <a href="...">
+        # 或者 <div class="list">
+        for a in soup.select('#list a, .list a, div.list ul li a'):
+            href = a.get('href')
+            if href and ('.html' in href or re.search(r'/\d+/\d+\.html', href)):
+                full_url = urljoin(start_url, href)
+                if full_url not in links: links.append(full_url)
+    
+    # 针对 2wxsi.com 的目录提取
+    if '2wxsi' in start_url:
+        for a in soup.select('.book-item a, .book-list a, .list a, .item a'):
+            href = a.get('href')
+            if href and ('.html' in href or re.search(r'/\d+/\d+/?$', href)):
+                full_url = urljoin(start_url, href)
+                if full_url not in links: links.append(full_url)
+    
+    # ==================== 新增：针对 2kzw.la 的目录提取 ====================
+    if '2kzw.la' in start_url:
+        # 使用 dd a 选择器提取所有章节链接
+        for a in soup.select('dd a'):
+            href = a.get('href')
+            if href and not href.startswith('#') and not href.startswith('javascript:'):
+                full_url = urljoin(start_url, href)
+                if full_url not in links:
+                    links.append(full_url)
+        # 按链接中的数字 ID 排序（2kzw.la 的 URL 格式为 .../数字.html）
+        def numeric_key(url):
+            match = re.search(r'/(\d+)\.html$', url)
+            return int(match.group(1)) if match else 0
+        if links:
+            links.sort(key=numeric_key)
+        # 如果成功提取到链接，则跳过后续的通用提取逻辑
+        if links:
+            # 小说名优化：若 h1 不准确，尝试从 title 中提取
+            if novel_name == "Unknown" or len(novel_name) < 2:
+                title_tag = soup.find('title')
+                if title_tag:
+                    title_text = title_tag.get_text().strip()
+                    # 格式如 "你或像你的人_明开夜合_2k小说"
+                    parts = re.split(r'[_\-|]', title_text)
+                    novel_name = max(parts, key=len).strip() if len(parts) >= 2 else parts[0].strip()
+                    safe_name = sanitize_filename(novel_name)
+            # 作者提取（可选，如果不提供覆盖）
+            if author_name == "佚名" and not override_author:
+                # 尝试从 title 中提取作者
+                title_tag = soup.find('title')
+                if title_tag:
+                    title_text = title_tag.get_text().strip()
+                    parts = re.split(r'[_\-|]', title_text)
+                    if len(parts) >= 2:
+                        # 假设第二部分是作者
+                        author_name = parts[1].strip()
+            # 直接跳转到链接处理，不再执行后面的通用选择器
+            pass  # 注意：不能直接 return，需要继续往下走到链接处理部分
+    # ===================================================================
+    
+    if not links:
+        dir_selectors = [
+            'ul.list.clearfix li.mulu a',
+            '#list dd a',
+            '.book-list ul li a',
+            '#chapterlist li a',
+            '.section-list li a',
+            'td a[href*=".html"]'
+        ]
+        
+        found_links = []
+        for sel in dir_selectors:
+            found_links.extend(soup.select(sel))
+        
+        if found_links:
+            for a in found_links:
+                full_url = urljoin(start_url, a.get('href'))
+                if full_url not in links: links.append(full_url)
+        else:
+            links = [start_url]
+
+    if log_callback: log_callback(f"开始抓取: {novel_name}")
+    if log_callback: log_callback(f"找到 {len(links)} 个分页/章节")
+    
+    full_content = []
+    os.makedirs(output_dir, exist_ok=True)
+    txt_path = os.path.join(output_dir, f"{safe_name}.txt")
+    
+    for i, link in enumerate(links, 1):
+        url_hash = get_url_hash(link)
+        if existing_chapter_hashes and url_hash in existing_chapter_hashes:
+            if log_callback: log_callback(f"跳过已抓取页 [{i}]: {link}")
+            continue
+            
+        if log_callback: log_callback(f"处理中 [{i}/{len(links)}]: {link}")
+        
+        p_html = fetch_html(session, link, proxy=proxy)
+        if p_html:
+            p_soup = BeautifulSoup(p_html, 'html.parser')
+            # 内容选择器
+            content_div = (
+                p_soup.select_one('div.book_con.fix#text') or 
+                p_soup.select_one('#article') or
+                p_soup.select_one('.article-content') or
+                p_soup.select_one('#article-content') or
+                p_soup.select_one('.maintext') or
+                p_soup.select_one('#content') or
+                p_soup.select_one('.content') or
+                p_soup.select_one('#txt') or
+                p_soup.select_one('div.read-content') or
+                p_soup.select_one('article.article-content') or
+                p_soup.select_one('td[width="820"]') or
+                p_soup.select_one('div.main_content') or
+                p_soup.select_one('.post-content') or
+                p_soup.select_one('.chapter-content') or
+                p_soup.select_one('td p')
+            )
+            
+            if content_div:
+                # 移除干扰元素
+                for s in content_div(['script', 'ins', 'nav', 'style', 'div', 'iframe', 'button', 'input']): s.decompose()
+                
+                title_elem = p_soup.find('h1') or p_soup.find('h2') or p_soup.select_one('td strong')
+                page_title = title_elem.text.strip() if title_elem else f"第 {i} 章节"
+                
+                # 特殊处理 52shuku：有些内容在 <p> 标签中
+                # 如果没有明显的段落，尝试直接获取文本并按行分割
+                text = content_div.get_text(separator='\n')
+                lines = [l.strip() for l in text.split('\n') if l.strip()]
+                
+                filtered_lines = []
+                # 扩展垃圾词库
+                junk_keywords = [
+                    '52书库', '52shuku', '传送门', 'APP下载', '半夏小说', 'xbanxia', 'kanunu8', 
+                    '看书吧', 'www.', '.com', '.net', '本站域名', '2wxsi', '爱文学', 
+                    '喜欢就分享', '收藏本页', '返回首页', '点此报错', '举报反馈',
+                    '微信', '公众号', '扫码', '关注', '加入书架', '推荐书目', '最新章节'
+                ]
+                for line in lines:
+                    line_lower = line.lower()
+                    if not any(k.lower() in line_lower for k in junk_keywords):
+                        filtered_lines.append("　　" + line)
+                
+                separator_line = "=" * 40
+                page_header = f"\n\n{separator_line}\n【第 {i} 页】: {page_title}\n{separator_line}\n\n"
+                
+                full_content.append(page_header + "\n\n".join(filtered_lines))
+        
+        # 频率限制
+        time.sleep(random.uniform(0.3, 1.0))
+    
+    with open(txt_path, "a" if existing_chapter_hashes else "w", encoding="utf-8") as f:
+        if not existing_chapter_hashes: 
+            header = f"《{novel_name}》\n"
+            if author_name and author_name != "佚名":
+                header += f"作者：{author_name}\n"
+            header += "\n"
+            f.write(header)
+        f.write("\n\n".join(full_content))
+    
+    return novel_name, txt_path, None
+
+
+if __name__ == "__main__":
+    import sys
+    import json
+    
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--test":
+            proxy = sys.argv[2] if len(sys.argv) > 2 else None
+            if not proxy:
+                print(json.dumps({"success": False, "message": "未提供代理地址"}))
+                sys.exit(0)
+            
+            session = requests.Session()
+            session.verify = False
+            headers = get_random_headers("https://www.google.com")
             try:
-                # 调用单本下载函数（注意 run_crawler 会创建独立文件）
-                novel_name, txt_path, html_path = run_crawler(
-                    start_url=url,
-                    output_dir=OUTPUT_DIR,
-                    log_callback=lambda msg: log_message(task_id, f"  {msg}"),
-                    override_name=None,
-                    existing_chapter_hashes=None,  # 批量模式默认全量下载
-                    update_meta_callback=None,
-                    proxy=proxy_url if proxy_url else None
-                )
-                task_data = get_task(task_id)
-                task_data['results'].append({
-                    'url': url,
-                    'novel_name': novel_name,
-                    'txt_path': txt_path,
-                    'html_path': html_path,
-                    'status': 'success'
-                })
-                task_data['completed'] = idx
-                save_task(task_id, task_data)
-                log_message(task_id, f"第 {idx} 部完成：{novel_name}")
+                proxies = {'http': proxy, 'https': proxy}
+                start_time = time.time()
+                target_test = "http://www.baidu.com" if "xbanxia" not in (proxy or "") else "https://www.google.com"
+                resp = session.get(target_test, headers=headers, timeout=10, proxies=proxies)
+                elapsed = time.time() - start_time
+                if resp.status_code == 200:
+                    print(json.dumps({"success": True, "message": f"连接成功", "latency": round(elapsed, 3)}))
+                else:
+                    print(json.dumps({"success": False, "message": f"连接失败 (HTTP {resp.status_code})"}))
             except Exception as e:
-                import traceback
-                error_msg = f"第 {idx} 部下载失败：{str(e)}\n{traceback.format_exc()}"
-                log_message(task_id, error_msg)
-                task_data = get_task(task_id)
-                task_data['results'].append({
-                    'url': url,
-                    'error': str(e),
-                    'status': 'error'
-                })
-                task_data['completed'] = idx
-                save_task(task_id, task_data)
-            # 作品之间休息 3 秒
-            if idx < len(selected_urls):
-                time.sleep(3)
+                print(json.dumps({"success": False, "message": f"连接异常: {str(e)}"}))
+            sys.exit(0)
+        
+        if sys.argv[1] == "--batch-test":
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            proxy_list = json.loads(sys.argv[2])
+            test_target = sys.argv[3] if len(sys.argv) > 3 else "https://www.google.com"
+            
+            results = []
+            def test_one(p):
+                session = requests.Session()
+                session.verify = False
+                headers = get_random_headers(test_target)
+                try:
+                    proxies = {'http': p, 'https': p}
+                    start_time = time.time()
+                    # 使用指定的测试目标
+                    resp = session.get(test_target, headers=headers, timeout=5, proxies=proxies)
+                    elapsed = time.time() - start_time
+                    if resp.status_code == 200:
+                        return {"proxy": p, "success": True, "latency": round(elapsed, 3)}
+                except:
+                    pass
+                return {"proxy": p, "success": False, "latency": 999}
 
-        # 任务结束
-        final_task = get_task(task_id)
-        final_task['status'] = 'finished'
-        save_task(task_id, final_task)
-        log_message(task_id, "批量下载任务全部完成")
+            with ThreadPoolExecutor(max_workers=15) as executor:
+                futures = [executor.submit(test_one, p) for p in proxy_list]
+                for future in as_completed(futures):
+                    res = future.result()
+                    if res["success"]:
+                        results.append(res)
+            
+            # 按延迟排序
+            results.sort(key=lambda x: x['latency'])
+            print(json.dumps(results))
+            sys.exit(0)
 
-    thread = threading.Thread(target=batch_worker)
-    thread.daemon = True
-    thread.start()
-    return redirect(url_for('logs', task_id=task_id))
+        if sys.argv[1] == "--debug":
+            url = sys.argv[2]
+            proxy = sys.argv[3] if len(sys.argv) > 3 else None
+            session = requests.Session()
+            session.verify = False
+            html = fetch_html(session, url, proxy=proxy)
+            if not html:
+                print(json.dumps({"success": False, "error": "Fetch failed"}))
+                sys.exit(0)
+            
+            soup = BeautifulSoup(html, 'html.parser')
+            links = []
+            
+            # Use the same logic as in run_crawler to find links
+            base_match = re.search(r'([a-zA-Z0-9]+)(?:_\d+)?\.html', url)
+            if base_match:
+                book_id = base_match.group(1)
+                pattern = rf'href=[\"\']([^\"\']*{re.escape(book_id)}(?:_\d+)?\.html)[\"\']'
+                for match in re.finditer(pattern, html):
+                    links.append(urljoin(url, match.group(1)))
+            
+            # Pagination links
+            pagination = soup.select('.pagination a, .pagination2 a, .page-links a, .mulu-list a, .list a, ul.list li a')
+            for a in pagination:
+                links.append(urljoin(url, a.get('href')))
+            
+            unique_links = sorted(list(set([l for l in links if '.html' in l])))
+            
+            # Content check
+            content_div = (
+                soup.select_one('div.book_con.fix#text') or 
+                soup.select_one('#article') or
+                soup.select_one('#content') or
+                soup.select_one('.content')
+            )
+            content_sample = content_div.get_text()[:1000] if content_div else "No content found"
+            
+            # Title
+            h1 = soup.find('h1')
+            title = h1.text.strip() if h1 else "Unknown"
+            
+            print(json.dumps({
+                "success": True,
+                "title": title,
+                "len": len(html),
+                "links_count": len(unique_links),
+                "links_sample": unique_links[:50],
+                "content_sample": content_sample
+            }))
+            sys.exit(0)
 
-@app.route('/console')
-def console():
-    """爬虫控制台"""
-    return render_template('index.html')
+        if sys.argv[1] == "--author":
+            author_url = sys.argv[2]
+            proxy = sys.argv[3] if len(sys.argv) > 3 else None
+            try:
+                name, works = parse_author_page(author_url, proxy=proxy)
+                print(json.dumps({"author": name, "works": works}))
+            except Exception as e:
+                print(json.dumps({"error": str(e)}))
+            sys.exit(0)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    # 获取参数
+    target = sys.argv[1] if len(sys.argv) > 1 else "https://www.52shuku.net/yanqing/18_b/bjZ2n.html"
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else "./novels"
+    proxy_arg = sys.argv[3] if len(sys.argv) > 3 else None
+    
+    # 额外支持 --title 和 --author 参数
+    ov_name = None
+    ov_author = None
+    if "--title" in sys.argv:
+        idx = sys.argv.index("--title")
+        if idx + 1 < len(sys.argv): ov_name = sys.argv[idx+1]
+    if "--author-name" in sys.argv:
+        idx = sys.argv.index("--author-name")
+        if idx + 1 < len(sys.argv): ov_author = sys.argv[idx+1]
+
+    run_crawler(target, out_dir, log_callback=print, override_name=ov_name, override_author=ov_author, proxy=proxy_arg)
